@@ -126,4 +126,16 @@ container:RegisterEvent("PLAYER_UPDATE_RESTING")
 container:RegisterEvent("UNIT_INVENTORY_CHANGED")
 container:RegisterEvent("UNIT_AURA")
 container:RegisterEvent("SPELLS_CHANGED")
-container:SetScript("OnEvent", CheckReminders)
+-- Show a welcome message when the addon loads
+local function ShowWelcomeMessage()
+    print("|cff00ff00AlwinPack loaded!|r Simple reminders for the squad are now active.")
+end
+
+local function OnEvent(self, event, ...)
+    if event == "PLAYER_ENTERING_WORLD" then
+        ShowWelcomeMessage()
+    end
+    CheckReminders()
+end
+
+container:SetScript("OnEvent", OnEvent)
