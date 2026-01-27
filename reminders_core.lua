@@ -5,6 +5,7 @@ AlwinPack.reminderModules = {}
 local function EnsureSettings()
     if not AlwinPackSettings then AlwinPackSettings = {} end
     if not AlwinPackSettings.enabledRules then AlwinPackSettings.enabledRules = {} end
+    if not AlwinPackSettings.enabledLowRules then AlwinPackSettings.enabledLowRules = {} end
     if not AlwinPackSettings.thresholds then AlwinPackSettings.thresholds = {} end
 end
 
@@ -26,6 +27,18 @@ end
 function AlwinPack:SetRuleEnabled(ruleId, enabled)
     EnsureSettings()
     AlwinPackSettings.enabledRules[ruleId] = enabled
+end
+
+function AlwinPack:IsLowEnabled(ruleId)
+    EnsureSettings()
+    local enabled = AlwinPackSettings.enabledLowRules[ruleId]
+    if enabled == nil then return true end -- Default to TRUE for low warnings if not set
+    return enabled
+end
+
+function AlwinPack:SetLowEnabled(ruleId, enabled)
+    EnsureSettings()
+    AlwinPackSettings.enabledLowRules[ruleId] = enabled
 end
 
 function AlwinPack:GetRuleThreshold(ruleId, default)
@@ -89,13 +102,15 @@ end
 
 function AlwinPack:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00AlwinPack v1.1.0 loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
+    print("|cff00ff00AlwinPack|r |cffffcc00v1.2.0|r |cff00ff00 loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
 AlwinPack.AllRules = {
     { id = "general_master", label = "Enable AlwinPack", group = "General", description = "Toggle the entire addon on or off." },
     { id = "general_welcome", label = "Show Welcome Message", group = "General", description = "Show the loaded message when logging in." },
+    { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 10, description = "Show a warning when your Water count drops below specific threshold if you are a mana user." },
+    { id = "general_water_minlevel", label = "Water Min Level", group = "General", defaultThreshold = 10, description = "Minimum level required to show the Buy Water reminder." },
     { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, description = "Show a warning when your ammo count drops below the configured threshold when resting." },
     { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, description = "Show a warning when your ammo count drops below the critical threshold at any time." },
     { id = "hunter_aspect", label = "Missing Aspect", group = "Hunter", description = "Reminds you to have an Aspect buff active." },
@@ -104,7 +119,12 @@ AlwinPack.AllRules = {
     { id = "mage_rune_portals", label = "Low Runes of Portals", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Runes of Portals count drops below the configured threshold when resting." },
     { id = "mage_ai_buff", label = "Missing Arcane Intellect Buff", group = "Mage", description = "Reminds you to buff yourself with Arcane Intellect." },
     { id = "mage_armor_buff", label = "Missing Armor Buff", group = "Mage", description = "Reminds you to buff yourself with an Armor buff." },
-    { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 5, description = "Show a warning when your Ankhs count drops below the configured threshold." },
+    { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 8, description = "Show a warning when your Ankhs count drops below the configured threshold." },
+    { id = "shaman_fish_oil", label = "Buy Fish Oil", group = "Shaman", defaultThreshold = 10, description = "Show a warning when your Fish Oil count drops below the configured threshold." },
+    { id = "shaman_fish_scales", label = "Buy Fish Scales", group = "Shaman", defaultThreshold = 10, description = "Show a warning when your Fish Scales count drops below the configured threshold." },
+    { id = "shaman_shield_buff", label = "Missing Shield Buff", group = "Shaman", defaultThreshold = 60, hasLowWarningToggle = true, description = "Reminds you to buff yourself with a Shield buff." },
+    { id = "shaman_weapon_buff", label = "Missing Weapon Buff", group = "Shaman", defaultThreshold = 60, hasLowWarningToggle = true, description = "Smart reminder for Shaman weapon imbues based on spec/dual-wielding." },
+
     -- Add more here as you add rules
 }
 
@@ -232,48 +252,120 @@ local function CreateOptionsPanel()
                 AlwinPack:SetRuleEnabled(rule.id, self:GetChecked())
                 AlwinPack:CheckReminders()
             end)
+
             panel.checkboxes[rule.id] = cb
             
-            -- Description
+            local descY = -8
+            local desc = nil
+            
+            -- Description Logic
             if rule.description then
-                local desc = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-                desc:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 6, 0)
-                desc:SetPoint("RIGHT", -10, 0)
-                desc:SetJustifyH("LEFT")
+                desc = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+                
+                if rule.hasLowWarningToggle then
+                     -- New Layout: Description inline with Main Checkbox
+                     desc:SetPoint("LEFT", cb.Text, "RIGHT", 8, 0)
+                     desc:SetJustifyH("LEFT")
+                     -- Don't increase height yet, we stay on line 1
+                else
+                     -- Standard Layout: Description below
+                     desc:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 6, 0)
+                     desc:SetPoint("RIGHT", -10, 0)
+                     desc:SetJustifyH("LEFT")
+                     height = 55 -- Increase height for 2nd line
+                     descY = -24
+                end
+                
                 desc:SetText(rule.description)
                 desc:SetTextColor(0.6, 0.6, 0.6)
-                height = 55 -- Increase height
             end
             
-            -- If rule has a threshold, add an input box
+            -- If rule has a threshold, add controls
             if rule.defaultThreshold then
-                -- Use unique global name for the editbox to avoid template issues
-                local ebName = "AlwinPackEditBox_" .. rule.id
-                local eb = CreateFrame("EditBox", ebName, row, "InputBoxTemplate")
-                eb:SetSize(40, 20)
-                eb:SetPoint("RIGHT", row, "RIGHT", -20, 0)
                 
-                eb:SetAutoFocus(false)
-                eb:SetMaxLetters(5)
-                eb:SetNumeric(true)
-                eb:SetText(tostring(AlwinPack:GetRuleThreshold(rule.id, rule.defaultThreshold)))
-                eb:SetCursorPosition(0)
-                eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-                eb:SetScript("OnEnterPressed", function(self)
-                    AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
-                    self:ClearFocus()
-                    AlwinPack:CheckReminders()
-                end)
-                eb:SetScript("OnEditFocusLost", function(self)
-                    AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
-                    AlwinPack:CheckReminders()
-                end)
-                panel.editboxes[rule.id] = eb
-                
-                local lbl = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-                lbl:SetPoint("RIGHT", eb, "LEFT", -10, 0)
-                lbl:SetText("Threshold")
-            end
+                if rule.hasLowWarningToggle then
+                    -- Row 2: Low Warning Wrapper
+                    height = height + 25 -- Add height for the second row
+                    
+                    -- Low Warning Checkbox
+                    local lowCb = CreateFrame("CheckButton", nil, row, "InterfaceOptionsCheckButtonTemplate")
+                    -- Align horizontally with the main checkbox (Same X), but underneath (New Y)
+                    lowCb:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 0, -2) 
+                    lowCb.Text:SetText("Warn if low")
+                    lowCb.Text:SetTextColor(0.8, 0.8, 0.8)
+                    lowCb:SetChecked(AlwinPack:IsLowEnabled(rule.id))
+                    lowCb:SetScript("OnClick", function(self)
+                        AlwinPack:SetLowEnabled(rule.id, self:GetChecked())
+                        AlwinPack:CheckReminders()
+                    end)
+                    panel.checkboxes[rule.id.."_low"] = lowCb
+                    
+                    -- Small explanatory text
+                    local lowDesc = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+                    lowDesc:SetPoint("LEFT", lowCb.Text, "RIGHT", 5, 0)
+                    lowDesc:SetText("Show a warning if active but running out. Shows warning with")
+                    lowDesc:SetTextColor(0.5, 0.5, 0.5)
+
+                    -- EditBox
+                    local ebName = "$parentEditBox"..rule.id
+                    local eb = CreateFrame("EditBox", ebName, row, "InputBoxTemplate")
+                    eb:SetSize(40, 20)
+                    eb:SetPoint("LEFT", lowDesc, "RIGHT", 10, 0)
+                    eb:SetAutoFocus(false)
+                    eb:SetMaxLetters(5)
+                    eb:SetNumeric(true)
+                    eb:SetText(tostring(AlwinPack:GetRuleThreshold(rule.id, rule.defaultThreshold)))
+                    eb:SetCursorPosition(0)
+                    
+                    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+                    eb:SetScript("OnEnterPressed", function(self)
+                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
+                        self:ClearFocus()
+                        AlwinPack:CheckReminders()
+                    end)
+                    eb:SetScript("OnEditFocusLost", function(self)
+                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
+                        AlwinPack:CheckReminders()
+                    end)
+                    panel.editboxes[rule.id] = eb
+                    
+                    -- Helper text
+                    local secondsText = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+                    secondsText:SetPoint("LEFT", eb, "RIGHT", 5, 0)
+                    secondsText:SetText(rule.lowLabel or "seconds remaining.")
+                    secondsText:SetTextColor(0.6, 0.6, 0.6)
+                    
+                else
+                    -- Simple Layout: Single row, just threshold
+                    -- EditBox to the right of the label
+                    local ebName = "$parentEditBox"..rule.id
+                    local eb = CreateFrame("EditBox", ebName, row, "InputBoxTemplate")
+                    eb:SetSize(40, 20)
+                    eb:SetPoint("LEFT", cb.Text, "RIGHT", 10, 0)
+                    eb:SetAutoFocus(false)
+                    eb:SetMaxLetters(5)
+                    eb:SetNumeric(true)
+                    eb:SetText(tostring(AlwinPack:GetRuleThreshold(rule.id, rule.defaultThreshold)))
+                    eb:SetCursorPosition(0)
+                    
+                    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+                    eb:SetScript("OnEnterPressed", function(self)
+                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
+                        self:ClearFocus()
+                        AlwinPack:CheckReminders()
+                    end)
+                    eb:SetScript("OnEditFocusLost", function(self)
+                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
+                        AlwinPack:CheckReminders()
+                    end)
+                    panel.editboxes[rule.id] = eb
+                    
+                    local lbl = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+                    lbl:SetPoint("LEFT", eb, "RIGHT", 5, 0)
+                    lbl:SetText("Count")
+                    lbl:SetTextColor(0.6, 0.6, 0.6)
+                end
+            end    
             
             row:SetHeight(height)
             page.currentY = y - (height + 5)
@@ -316,6 +408,7 @@ local function CreateOptionsPanel()
         end
     end)
 
+
     if Settings and Settings.RegisterCanvasLayoutCategory then
         -- This is for the 2026 Anniversary/Modern client
         local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name, panel.name)
@@ -332,15 +425,18 @@ CreateOptionsPanel()
 function AlwinPack:InitializeDefaults()
     EnsureSettings()
     for _, rule in ipairs(self.AllRules) do
-        -- Initialize Thresholds
+        -- Initialize Thresholds and Low Enabled
         if rule.defaultThreshold then
             if AlwinPackSettings.thresholds[rule.id] == nil then
                  AlwinPackSettings.thresholds[rule.id] = rule.defaultThreshold
             end
+            if AlwinPackSettings.enabledLowRules[rule.id] == nil then
+                 AlwinPackSettings.enabledLowRules[rule.id] = true
+            end
         end
         -- Initialize Enabled State (Default to true)
         if AlwinPackSettings.enabledRules[rule.id] == nil then
-             AlwinPackSettings.enabledRules[rule.id] = true
+            AlwinPackSettings.enabledRules[rule.id] = true
         end
     end
 end

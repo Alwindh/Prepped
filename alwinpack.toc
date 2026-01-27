@@ -2,12 +2,13 @@
 ## Title: AlwinPack
 ## Notes: Simple reminders for the squad (Ankhs, Poisons, Repairs)
 ## Author: Spacer
-## Version: 1.1.0
+## Version: 1.2.0
 
 ## SavedVariables: AlwinPackSettings
 
 alwinpack.lua
 reminders_core.lua
+reminders_general.lua
 reminders_multiclass.lua
 reminders_shaman.lua
 reminders_hunter.lua
