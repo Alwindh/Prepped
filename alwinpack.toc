@@ -1,0 +1,7 @@
+## Interface: 20504
+## Title: AlwinPack
+## Notes: Simple reminders for the squad (Ankhs, Poisons, Repairs)
+## Author: Spacer
+## Version: 1.0.0
+
+alwinpack.lua
