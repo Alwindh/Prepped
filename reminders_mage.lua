@@ -1,12 +1,36 @@
 -- Mage-specific reminders module
+function HasAnyBuff(buffList)
+    for i = 1, 40 do
+        local name = UnitBuff("player", i)
+        if not name then break end
+        for _, buff in ipairs(buffList) do
+            if name == buff then return true end
+        end
+    end
+    return false
+end
+
 local MageReminders = {}
 
 local mageReminders = {
     {
+        id = "mage_ai_buff",
+        message = "BUFF YOURSELF: Arcane Intellect!",
+        mustRest = false,
+        requiredSpell = "Arcane Intellect",
+        missingBuffs = {"Arcane Intellect", "Arcane Brilliance"},
+    },
+        {
+            id = "mage_armor_buff",
+            message = "BUFF YOURSELF: Armor!",
+            mustRest = false,
+            requiredAnySpell = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
+            missingBuffs = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
+        },
+    {
         id = "mage_powder",
         message = "LOW ARCANE POWDER (%s left!)", -- %s will be replaced by the number
         itemCheck = 17020, -- Arcane Powder
-        minCount = 10,
         mustRest = true,
         requiredSpell = "Arcane Brilliance" 
     },
@@ -14,7 +38,6 @@ local mageReminders = {
         id = "mage_rune_teleport",
         message = "LOW RUNE OF TELEPORTATION (%s left!)",
         itemCheck = 17031, -- Rune of Teleportation
-        minCount = 10,
         mustRest = true,
         requiredAnySpell = {
             "Teleport: Theramore",
@@ -30,6 +53,26 @@ local mageReminders = {
             "Teleport: Shattrath"
         }
     },
+        {
+        id = "mage_rune_portals",
+        message = "LOW RUNE OF PORTALS (%s left!)",
+        itemCheck = 17032, -- Rune of Portals
+        mustRest = true,
+        requiredAnySpell = {
+            "Portal: Theramore",
+            "Portal: Stormwind", 
+            "Portal: Ironforge", 
+            "Portal: Darnassus", 
+            "Portal: Exodar", 
+            "Portal: Orgrimmar", 
+            "Portal: Undercity", 
+            "Portal: Thunder Bluff", 
+            "Portal: Stonard", 
+            "Portal: Silvermoon",
+            "Portal: Shattrath"
+        }
+    },
+    
 }
 
 local lines = {}
@@ -88,7 +131,10 @@ function MageReminders.CheckReminders()
             local displayMessage = config.message
 
             -- Resting check
-            if config.mustRest and not isResting then trigger = false end
+            if config.mustRest ~= nil then
+                if config.mustRest and not isResting then trigger = false end
+                if not config.mustRest and isResting then trigger = false end
+            end
 
             -- Spell Learned Check
             if trigger and config.requiredSpell then
@@ -100,14 +146,18 @@ function MageReminders.CheckReminders()
                 if not IsAnySpellLearned(config.requiredAnySpell) then trigger = false end
             end
 
+            -- Missing Buffs Check
+            if trigger and config.missingBuffs then
+                if HasAnyBuff(config.missingBuffs) then trigger = false end
+            end
+
             -- Item Count Check
             if trigger and config.itemCheck then
                 local count = GetItemCount(config.itemCheck)
-                local threshold = config.minCount
+                local threshold = 0
                 if AlwinPack and AlwinPack.GetRuleThreshold then
-                     threshold = AlwinPack:GetRuleThreshold(config.id, config.minCount)
+                     threshold = AlwinPack:GetRuleThreshold(config.id)
                 end
-                
                 if count >= threshold then 
                     trigger = false 
                 else

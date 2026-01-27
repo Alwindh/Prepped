@@ -3,11 +3,18 @@ local HunterReminders = {}
 
 local hunterReminders = {
     {
-        id = "hunter_ammo",
+        id = "hunter_ammo_critical",
+        message = "CRITICAL AMMO (%s left!)", -- %s will be replaced by the number
+        ammoCheck = true,
+        mustNotRest = true,
+        minCount = 200,
+    },
+    {
+        id = "hunter_ammo_low",
         message = "LOW AMMO (%s left!)", -- %s will be replaced by the number
         ammoCheck = true,
-        minCountResting = 1000,
-        minCountMoving = 200,
+        mustRest = true,
+        minCount = 1000,
     },
     {
         id = "hunter_aspect",
@@ -64,9 +71,9 @@ function HunterReminders.CheckReminders()
             if trigger and config.ammoCheck then
                 local count = GetCurrentAmmoCount()
                 if not count then trigger = false else
-                    local userThreshold = config.minCountMoving
+                    local userThreshold = 0
                     if AlwinPack and AlwinPack.GetRuleThreshold then
-                        userThreshold = AlwinPack:GetRuleThreshold(config.id, config.minCountMoving)
+                        userThreshold = AlwinPack:GetRuleThreshold(config.id)
                     end
                     
                     local threshold = userThreshold

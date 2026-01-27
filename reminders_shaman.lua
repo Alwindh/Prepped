@@ -6,7 +6,6 @@ local shamanReminders = {
         id = "shaman_ankh",
         message = "BUY ANKHS! (%s/10)",
         item = 17030,
-        minCount = 10,
         mustRest = true,
         spell = 20608,
     },
@@ -40,11 +39,11 @@ function ShamanReminders.CheckReminders()
             if config.mustRest and not isResting then trigger = false end
             if config.mustNotRest and isResting then trigger = false end
             -- Item Logic
-            if trigger and config.item and config.minCount then
+            if trigger and config.item then
                 local count = GetItemCount(config.item)
-                local threshold = config.minCount
+                local threshold = 0
                 if AlwinPack and AlwinPack.GetRuleThreshold then
-                     threshold = AlwinPack:GetRuleThreshold(config.id, config.minCount)
+                     threshold = AlwinPack:GetRuleThreshold(config.id)
                 end
                 if count >= threshold then trigger = false end
                 displayMessage = string.format(config.message, count)
