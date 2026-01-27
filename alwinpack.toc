@@ -4,4 +4,11 @@
 ## Author: Spacer
 ## Version: 1.0.0
 
+## SavedVariables: AlwinPackSettings
+
 alwinpack.lua
+reminders_core.lua
+reminders_multiclass.lua
+reminders_shaman.lua
+reminders_hunter.lua
+reminders_mage.lua
