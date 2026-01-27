@@ -89,7 +89,7 @@ end
 
 function AlwinPack:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00AlwinPack loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
+    print("|cff00ff00AlwinPack v1.1.0 loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
