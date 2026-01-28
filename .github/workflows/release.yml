@@ -1,0 +1,43 @@
+name: Release Addon
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'prepped.toc'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from TOC
+        id: get_version
+        run: |
+          # Extract version from TOC file, ignoring carriage returns
+          VERSION=$(grep "## Version:" prepped.toc | sed 's/## Version: //' | tr -d '\r')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION-release" >> $GITHUB_OUTPUT
+
+      - name: Package Addon
+        run: |
+          mkdir Prepped
+          # Copy all relevant addon files into the folder
+          cp *.lua *.toc Prepped/
+          zip -r Prepped.zip Prepped/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Prepped ${{ steps.get_version.outputs.version }}
+          files: Prepped.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
