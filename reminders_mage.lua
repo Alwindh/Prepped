@@ -75,29 +75,6 @@ local mageReminders = {
     
 }
 
-local lines = {}
-local function CreateReminderLine(index)
-    local container = _G.PreppedContainer
-    local f = CreateFrame("Frame", nil, container)
-    f:SetSize(400, 30)
-    -- Align with other modules if possible, but for now just stacking them might overlap 
-    -- if multiple modules trigger at once. 
-    -- Ideally PreppedContainer handles layout, but the current design seems to have each module manage its own lines attached to the container.
-    -- To avoid overlap, we might need a shared layout manager, but for now we follow the existing pattern.
-    f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32 - 100) -- Offset slightly to avoid hiding other class reminders on top? 
-    -- Actually, usually only one class module is active per character.
-    -- so sticking to -(index-1)*32 is fine.
-    f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
-    
-    local bg = f:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0.5)
-    local txt = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    txt:SetPoint("CENTER")
-    f.text = txt
-    return f
-end
-
 local function IsSpellLearned(spellName)
     -- iterate spellbook
     for i = 1, GetNumSpellTabs() do
@@ -122,9 +99,7 @@ function MageReminders.CheckReminders()
     if playerClass ~= "MAGE" then return end
 
     local isResting = IsResting()
-    for _, line in ipairs(lines) do line:Hide() end
 
-    local activeCount = 0
     for _, config in ipairs(mageReminders) do
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
@@ -166,12 +141,11 @@ function MageReminders.CheckReminders()
             end
 
             if trigger then
-                activeCount = activeCount + 1
-                if not lines[activeCount] then
-                    lines[activeCount] = CreateReminderLine(activeCount)
+                local line = Prepped:GetNextLine()
+                if line then
+                    line.text:SetText(displayMessage)
+                    line:Show()
                 end
-                lines[activeCount].text:SetText(displayMessage)
-                lines[activeCount]:Show()
             end
         end
     end

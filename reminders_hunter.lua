@@ -25,21 +25,6 @@ local hunterReminders = {
     },
 }
 
-local lines = {}
-local function CreateReminderLine(index)
-    local container = _G.PreppedContainer
-    local f = CreateFrame("Frame", nil, container)
-    f:SetSize(400, 30)
-    f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
-    local bg = f:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0.5)
-    local txt = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    txt:SetPoint("CENTER")
-    f.text = txt
-    return f
-end
-
 local function GetCurrentAmmoCount()
     local itemID = GetInventoryItemID("player", 18)
     if not itemID then return nil end
@@ -59,8 +44,6 @@ function HunterReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
     if playerClass ~= "HUNTER" then return end
     local isResting = IsResting()
-    for _, line in ipairs(lines) do line:Hide() end
-    local activeCount = 0
     for _, config in ipairs(hunterReminders) do
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
@@ -90,12 +73,11 @@ function HunterReminders.CheckReminders()
                 if PlayerHasBuffFromList(config.missingBuffs) then trigger = false end
             end
             if trigger then
-                activeCount = activeCount + 1
-                if not lines[activeCount] then
-                    lines[activeCount] = CreateReminderLine(activeCount)
+                local line = Prepped:GetNextLine()
+                if line then
+                    line.text:SetText(displayMessage)
+                    line:Show()
                 end
-                lines[activeCount].text:SetText(displayMessage)
-                lines[activeCount]:Show()
             end
         end
     end

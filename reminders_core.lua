@@ -59,7 +59,11 @@ end
 
 function Prepped:SetRuleThreshold(ruleId, value)
     EnsureSettings()
-    PreppedSettings.thresholds[ruleId] = tonumber(value)
+    local num = tonumber(value) or 0
+    if ruleId == "general_repair" then
+        num = math.min(100, math.max(0, num))
+    end
+    PreppedSettings.thresholds[ruleId] = num
 end
 
 -- Slash command to open options menu
@@ -91,7 +95,44 @@ function Prepped:RegisterReminderModule(module)
     table.insert(self.reminderModules, module)
 end
 
+Prepped.displayLines = {}
+Prepped.activeCount = 0
+
+function Prepped:GetNextLine()
+    self.activeCount = self.activeCount + 1
+    local index = self.activeCount
+    if not self.displayLines[index] then
+        local container = _G.PreppedContainer
+        if not container then return nil end
+        
+        local f = CreateFrame("Frame", nil, container)
+        f:SetSize(400, 30)
+        f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
+        
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.5)
+        
+        local txt = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        txt:SetPoint("CENTER")
+        f.text = txt
+        
+        self.displayLines[index] = f
+    end
+    return self.displayLines[index]
+end
+
+function Prepped:ResetReminders()
+    self.activeCount = 0
+    if self.displayLines then
+        for _, line in ipairs(self.displayLines) do
+            line:Hide()
+        end
+    end
+end
+
 function Prepped:CheckReminders()
+    self:ResetReminders()
     for _, module in ipairs(self.reminderModules) do
         if module.CheckReminders then
             module.CheckReminders()
@@ -102,16 +143,16 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.2.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.3.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
 Prepped.AllRules = {
     { id = "general_master", label = "Enable Prepped", group = "General", description = "Toggle the entire addon on or off." },
     { id = "general_welcome", label = "Show Welcome Message", group = "General", description = "Show the loaded message when logging in." },
-    { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 10, description = "Show a warning when your Water count drops below specific threshold if you are a mana user." },
+    { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 40, description = "Show a warning when your Water count drops below specific threshold if you are a mana user." },
     { id = "general_water_minlevel", label = "Water Min Level", group = "General", defaultThreshold = 10, description = "Minimum level required to show the Buy Water reminder." },
-    { id = "general_repair", label = "Repair Reminder", group = "General", description = "Show a warning if your gear is damaged while you are resting." },
+    { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 100, description = "Show a warning if your gear durability drops below the configured percentage while you are resting." },
     { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, description = "Show a warning when your ammo count drops below the configured threshold when resting." },
     { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, description = "Show a warning when your ammo count drops below the critical threshold at any time." },
     { id = "hunter_aspect", label = "Missing Aspect", group = "Hunter", description = "Reminds you to have an Aspect buff active." },
@@ -321,11 +362,13 @@ local function CreateOptionsPanel()
                     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
                     eb:SetScript("OnEnterPressed", function(self)
                         Prepped:SetRuleThreshold(rule.id, self:GetNumber())
+                        self:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                         self:ClearFocus()
                         Prepped:CheckReminders()
                     end)
                     eb:SetScript("OnEditFocusLost", function(self)
                         Prepped:SetRuleThreshold(rule.id, self:GetNumber())
+                        self:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                         Prepped:CheckReminders()
                     end)
                     panel.editboxes[rule.id] = eb
@@ -352,18 +395,24 @@ local function CreateOptionsPanel()
                     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
                     eb:SetScript("OnEnterPressed", function(self)
                         Prepped:SetRuleThreshold(rule.id, self:GetNumber())
+                        self:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                         self:ClearFocus()
                         Prepped:CheckReminders()
                     end)
                     eb:SetScript("OnEditFocusLost", function(self)
                         Prepped:SetRuleThreshold(rule.id, self:GetNumber())
+                        self:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                         Prepped:CheckReminders()
                     end)
                     panel.editboxes[rule.id] = eb
                     
                     local lbl = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
                     lbl:SetPoint("LEFT", eb, "RIGHT", 5, 0)
-                    lbl:SetText("Count")
+                    if rule.id == "general_repair" then
+                        lbl:SetText("% Durability")
+                    else
+                        lbl:SetText("Count")
+                    end
                     lbl:SetTextColor(0.6, 0.6, 0.6)
                 end
             end    

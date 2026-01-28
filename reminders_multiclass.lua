@@ -1,49 +1,64 @@
 -- Multi-class reminders module
 local MultiClassReminders = {}
 
-local lines = {}
-local function CreateReminderLine(index)
-    local container = _G.PreppedContainer
-    local f = CreateFrame("Frame", nil, container)
-    f:SetSize(400, 30)
-    f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
-    local bg = f:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0.5)
-    local txt = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    txt:SetPoint("CENTER")
-    f.text = txt
-    return f
-end
+local multiclassReminders = {
+    {
+        id = "general_repair",
+        message = "REPAIR YOUR GEAR!",
+        repairCheck = true,
+        mustRest = true,
+    },
+}
 
--- Checks if the user is resting and if their equipped gear is not fully repaired.
-function MultiClassReminders.CheckDurability()
-    if not IsResting() then return false end
+-- Checks if the user's equipped gear's average durability is below the configured threshold.
+local function GetAverageDurability()
+    local totalCurrent = 0
+    local totalMax = 0
+    local itemCount = 0
     
     for i = 1, 19 do
         local current, max = GetInventoryItemDurability(i)
-        if current and max and current < max then
-            return true
+        if current and max then
+            totalCurrent = totalCurrent + current
+            totalMax = totalMax + max
+            itemCount = itemCount + 1
         end
     end
-    return false
+    
+    if totalMax == 0 then return 100 end -- No items or all indestructible
+    return (totalCurrent / totalMax) * 100
 end
 
 function MultiClassReminders.CheckReminders()
-    if not Prepped or not Prepped:IsRuleEnabled("general_repair") then
-        if lines[1] then lines[1]:Hide() end
-        return
-    end
-
-    -- Clear previous state
-    for _, line in ipairs(lines) do line:Hide() end
+    local isResting = IsResting()
     
-    if MultiClassReminders.CheckDurability() then
-        if not lines[1] then
-            lines[1] = CreateReminderLine(1)
+    for _, config in ipairs(multiclassReminders) do
+        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
+            local trigger = true
+            local displayMessage = config.message
+            
+            if config.mustRest and not isResting then trigger = false end
+            
+            if trigger and config.repairCheck then
+                local threshold = 100
+                if Prepped and Prepped.GetRuleThreshold then
+                    threshold = Prepped:GetRuleThreshold(config.id, 100)
+                end
+                
+                local durability = GetAverageDurability()
+                if durability >= threshold then
+                    trigger = false
+                end
+            end
+            
+            if trigger then
+                local line = Prepped:GetNextLine()
+                if line then
+                    line.text:SetText(displayMessage)
+                    line:Show()
+                end
+            end
         end
-        lines[1].text:SetText("|cffff0000REPAIR YOUR GEAR!|r")
-        lines[1]:Show()
     end
 end
 
