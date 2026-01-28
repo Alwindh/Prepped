@@ -1,8 +1,8 @@
 ## Interface: 20504
 ## Title: Prepped
-## Notes: Simple reminders for the squad (Ankhs, Poisons, Repairs)
+## Notes: Simple reminders for chores (Reagents, buffs, repairs)
 ## Author: Excessive
-## Version: 1.3.3
+## Version: 1.3.4
 
 ## SavedVariables: PreppedSettings
 
