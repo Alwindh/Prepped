@@ -64,7 +64,7 @@ end
 
 -- Slash command to open options menu
 SLASH_PREPPED1 = "/prepped"
-SLASH_PREPPED2 = "/alwin"
+SLASH_PREPPED2 = "/prepped"
 SlashCmdList["PREPPED"] = function(msg)
     -- 1. Try the Modern 2026 API using our saved category object
     if Prepped.settingsCategory and Settings and Settings.OpenToCategory then
@@ -102,7 +102,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.2.0|r |cff00ff00 loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.2.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
