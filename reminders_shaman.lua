@@ -129,7 +129,7 @@ local shamanReminders = {
 
 local lines = {}
 local function CreateReminderLine(index)
-    local container = _G.AlwinPackContainer
+    local container = _G.PreppedContainer
     local f = CreateFrame("Frame", nil, container)
     f:SetSize(400, 30)
     f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
@@ -149,7 +149,7 @@ function ShamanReminders.CheckReminders()
     for _, line in ipairs(lines) do line:Hide() end
     local activeCount = 0
     for _, config in ipairs(shamanReminders) do
-        if not (AlwinPack and config.id and not AlwinPack:IsRuleEnabled(config.id)) then
+        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
             if config.mustRest and not isResting then trigger = false end
@@ -168,8 +168,8 @@ function ShamanReminders.CheckReminders()
             if trigger and config.missingBuffs then
                 -- Get User Threshold (Duration)
                 local threshold = 0
-                if AlwinPack and AlwinPack.GetRuleThreshold then
-                     threshold = AlwinPack:GetRuleThreshold(config.id, 0)
+                if Prepped and Prepped.GetRuleThreshold then
+                     threshold = Prepped:GetRuleThreshold(config.id, 0)
                 end
                 
                 local status = HasAnyBuff(config.missingBuffs, threshold)
@@ -178,7 +178,7 @@ function ShamanReminders.CheckReminders()
                     trigger = false 
                 elseif status == "low" then
                     -- Respect "Warn if Low" setting
-                    if AlwinPack and AlwinPack.IsLowEnabled and not AlwinPack:IsLowEnabled(config.id) then
+                    if Prepped and Prepped.IsLowEnabled and not Prepped:IsLowEnabled(config.id) then
                         trigger = false
                     else
                         trigger = true
@@ -198,8 +198,8 @@ function ShamanReminders.CheckReminders()
                     -- hasMH/hasOH are booleans. mhExp/ohExp are numbers (milliseconds remaining).
                     
                     local threshold = 0
-                    if AlwinPack and AlwinPack.GetRuleThreshold then
-                         threshold = AlwinPack:GetRuleThreshold(config.id, 0)
+                    if Prepped and Prepped.GetRuleThreshold then
+                         threshold = Prepped:GetRuleThreshold(config.id, 0)
                     end
                     local thresholdMs = threshold * 1000
                     
@@ -225,7 +225,7 @@ function ShamanReminders.CheckReminders()
                     if missing then
                         trigger = true
                     elseif isLow then
-                        if AlwinPack and AlwinPack.IsLowEnabled and not AlwinPack:IsLowEnabled(config.id) then
+                        if Prepped and Prepped.IsLowEnabled and not Prepped:IsLowEnabled(config.id) then
                             trigger = false
                         else
                             trigger = true
@@ -241,8 +241,8 @@ function ShamanReminders.CheckReminders()
             if trigger and config.item then
                 local count = GetItemCount(config.item)
                 local threshold = 0
-                if AlwinPack and AlwinPack.GetRuleThreshold then
-                     threshold = AlwinPack:GetRuleThreshold(config.id)
+                if Prepped and Prepped.GetRuleThreshold then
+                     threshold = Prepped:GetRuleThreshold(config.id)
                 end
                 if count >= threshold then trigger = false end
                 displayMessage = string.format(config.message, count)
@@ -259,6 +259,6 @@ function ShamanReminders.CheckReminders()
     end
 end
 
-if AlwinPack then
-    AlwinPack:RegisterReminderModule(ShamanReminders)
+if Prepped then
+    Prepped:RegisterReminderModule(ShamanReminders)
 end

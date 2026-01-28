@@ -6,7 +6,7 @@ local container = CreateFrame("Frame", "MySquadRemindersContainer", UIParent)
 container:SetSize(400, 200)
 container:SetPoint("CENTER", 0, 200)
 
-_G.AlwinPackContainer = container
+_G.PreppedContainer = container
 
 ----------------------------------------------------------------------
 -- CORE ENGINE v4.0 (Multi-Line Support)

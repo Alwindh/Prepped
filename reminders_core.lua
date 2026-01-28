@@ -1,49 +1,49 @@
-local AlwinPack = {}
-AlwinPack.reminderModules = {}
+local Prepped = {}
+Prepped.reminderModules = {}
 
 -- Settings
 local function EnsureSettings()
-    if not AlwinPackSettings then AlwinPackSettings = {} end
-    if not AlwinPackSettings.enabledRules then AlwinPackSettings.enabledRules = {} end
-    if not AlwinPackSettings.enabledLowRules then AlwinPackSettings.enabledLowRules = {} end
-    if not AlwinPackSettings.thresholds then AlwinPackSettings.thresholds = {} end
+    if not PreppedSettings then PreppedSettings = {} end
+    if not PreppedSettings.enabledRules then PreppedSettings.enabledRules = {} end
+    if not PreppedSettings.enabledLowRules then PreppedSettings.enabledLowRules = {} end
+    if not PreppedSettings.thresholds then PreppedSettings.thresholds = {} end
 end
 
-function AlwinPack:IsRuleEnabled(ruleId)
+function Prepped:IsRuleEnabled(ruleId)
     EnsureSettings()
     
     -- Master Switch Logic
-    local master = AlwinPackSettings.enabledRules["general_master"]
+    local master = PreppedSettings.enabledRules["general_master"]
     if master == nil then master = true end -- Default ON
     
     if ruleId == "general_master" then return master end
     if not master then return false end
 
-    local enabled = AlwinPackSettings.enabledRules[ruleId]
+    local enabled = PreppedSettings.enabledRules[ruleId]
     if enabled == nil then return true end -- default: enabled
     return enabled
 end
 
-function AlwinPack:SetRuleEnabled(ruleId, enabled)
+function Prepped:SetRuleEnabled(ruleId, enabled)
     EnsureSettings()
-    AlwinPackSettings.enabledRules[ruleId] = enabled
+    PreppedSettings.enabledRules[ruleId] = enabled
 end
 
-function AlwinPack:IsLowEnabled(ruleId)
+function Prepped:IsLowEnabled(ruleId)
     EnsureSettings()
-    local enabled = AlwinPackSettings.enabledLowRules[ruleId]
+    local enabled = PreppedSettings.enabledLowRules[ruleId]
     if enabled == nil then return true end -- Default to TRUE for low warnings if not set
     return enabled
 end
 
-function AlwinPack:SetLowEnabled(ruleId, enabled)
+function Prepped:SetLowEnabled(ruleId, enabled)
     EnsureSettings()
-    AlwinPackSettings.enabledLowRules[ruleId] = enabled
+    PreppedSettings.enabledLowRules[ruleId] = enabled
 end
 
-function AlwinPack:GetRuleThreshold(ruleId, default)
+function Prepped:GetRuleThreshold(ruleId, default)
     EnsureSettings()
-    local val = AlwinPackSettings.thresholds[ruleId]
+    local val = PreppedSettings.thresholds[ruleId]
     if val ~= nil then return val end
     
     if default then return default end
@@ -57,27 +57,27 @@ function AlwinPack:GetRuleThreshold(ruleId, default)
     return 0
 end
 
-function AlwinPack:SetRuleThreshold(ruleId, value)
+function Prepped:SetRuleThreshold(ruleId, value)
     EnsureSettings()
-    AlwinPackSettings.thresholds[ruleId] = tonumber(value)
+    PreppedSettings.thresholds[ruleId] = tonumber(value)
 end
 
 -- Slash command to open options menu
-SLASH_ALWINPACK1 = "/alwinpack"
-SLASH_ALWINPACK2 = "/alwin"
-SlashCmdList["ALWINPACK"] = function(msg)
+SLASH_PREPPED1 = "/prepped"
+SLASH_PREPPED2 = "/alwin"
+SlashCmdList["PREPPED"] = function(msg)
     -- 1. Try the Modern 2026 API using our saved category object
-    if AlwinPack.settingsCategory and Settings and Settings.OpenToCategory then
+    if Prepped.settingsCategory and Settings and Settings.OpenToCategory then
         -- We pass the ID of the category we stored during CreateOptionsPanel
-        Settings.OpenToCategory(AlwinPack.settingsCategory.ID)
+        Settings.OpenToCategory(Prepped.settingsCategory.ID)
         return
     end
 
     -- 2. Fallback for older Classic versions
     if type(InterfaceOptionsFrame_OpenToCategory) == "function" then
         -- Still requires the double-call bug fix for older clients
-        InterfaceOptionsFrame_OpenToCategory("AlwinPack")
-        InterfaceOptionsFrame_OpenToCategory("AlwinPack")
+        InterfaceOptionsFrame_OpenToCategory("Prepped")
+        InterfaceOptionsFrame_OpenToCategory("Prepped")
         return
     end
 
@@ -87,11 +87,11 @@ SlashCmdList["ALWINPACK"] = function(msg)
     end
 end
 
-function AlwinPack:RegisterReminderModule(module)
+function Prepped:RegisterReminderModule(module)
     table.insert(self.reminderModules, module)
 end
 
-function AlwinPack:CheckReminders()
+function Prepped:CheckReminders()
     for _, module in ipairs(self.reminderModules) do
         if module.CheckReminders then
             module.CheckReminders()
@@ -100,17 +100,18 @@ function AlwinPack:CheckReminders()
 end
 
 
-function AlwinPack:ShowWelcomeMessage()
+function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00AlwinPack|r |cffffcc00v1.2.0|r |cff00ff00 loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.2.0|r |cff00ff00 loaded!|r. Type |cffffff00/alwin|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
-AlwinPack.AllRules = {
-    { id = "general_master", label = "Enable AlwinPack", group = "General", description = "Toggle the entire addon on or off." },
+Prepped.AllRules = {
+    { id = "general_master", label = "Enable Prepped", group = "General", description = "Toggle the entire addon on or off." },
     { id = "general_welcome", label = "Show Welcome Message", group = "General", description = "Show the loaded message when logging in." },
     { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 10, description = "Show a warning when your Water count drops below specific threshold if you are a mana user." },
     { id = "general_water_minlevel", label = "Water Min Level", group = "General", defaultThreshold = 10, description = "Minimum level required to show the Buy Water reminder." },
+    { id = "general_repair", label = "Repair Reminder", group = "General", description = "Show a warning if your gear is damaged while you are resting." },
     { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, description = "Show a warning when your ammo count drops below the configured threshold when resting." },
     { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, description = "Show a warning when your ammo count drops below the critical threshold at any time." },
     { id = "hunter_aspect", label = "Missing Aspect", group = "Hunter", description = "Reminds you to have an Aspect buff active." },
@@ -130,17 +131,17 @@ AlwinPack.AllRules = {
 
 -- Options panel for Blizzard Interface Options
 local function CreateOptionsPanel()
-    local panel = CreateFrame("Frame", "AlwinPackOptionsPanel", UIParent)
-    panel.name = "AlwinPack"
+    local panel = CreateFrame("Frame", "PreppedOptionsPanel", UIParent)
+    panel.name = "Prepped"
 
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText("AlwinPack Reminders")
+    title:SetText("Prepped Reminders")
 
     -- 1. Identify Groups in order of appearance
     local groups = {}
     local seen = {}
-    for _, rule in ipairs(AlwinPack.AllRules) do
+    for _, rule in ipairs(Prepped.AllRules) do
         if rule.group and not seen[rule.group] then
             seen[rule.group] = true
             table.insert(groups, rule.group)
@@ -219,7 +220,7 @@ local function CreateOptionsPanel()
     panel.editboxes = {}
     panel.ruleFrames = {}
 
-    for i, rule in ipairs(AlwinPack.AllRules) do
+    for i, rule in ipairs(Prepped.AllRules) do
         local gName = rule.group
         if gName and panel.pages[gName] then
             local page = panel.pages[gName]
@@ -247,10 +248,10 @@ local function CreateOptionsPanel()
             local cb = CreateFrame("CheckButton", nil, row, "InterfaceOptionsCheckButtonTemplate")
             cb:SetPoint("TOPLEFT", 10, -8)
             cb.Text:SetText(rule.label)
-            cb:SetChecked(AlwinPack:IsRuleEnabled(rule.id))
+            cb:SetChecked(Prepped:IsRuleEnabled(rule.id))
             cb:SetScript("OnClick", function(self)
-                AlwinPack:SetRuleEnabled(rule.id, self:GetChecked())
-                AlwinPack:CheckReminders()
+                Prepped:SetRuleEnabled(rule.id, self:GetChecked())
+                Prepped:CheckReminders()
             end)
 
             panel.checkboxes[rule.id] = cb
@@ -293,10 +294,10 @@ local function CreateOptionsPanel()
                     lowCb:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 0, -2) 
                     lowCb.Text:SetText("Warn if low")
                     lowCb.Text:SetTextColor(0.8, 0.8, 0.8)
-                    lowCb:SetChecked(AlwinPack:IsLowEnabled(rule.id))
+                    lowCb:SetChecked(Prepped:IsLowEnabled(rule.id))
                     lowCb:SetScript("OnClick", function(self)
-                        AlwinPack:SetLowEnabled(rule.id, self:GetChecked())
-                        AlwinPack:CheckReminders()
+                        Prepped:SetLowEnabled(rule.id, self:GetChecked())
+                        Prepped:CheckReminders()
                     end)
                     panel.checkboxes[rule.id.."_low"] = lowCb
                     
@@ -314,18 +315,18 @@ local function CreateOptionsPanel()
                     eb:SetAutoFocus(false)
                     eb:SetMaxLetters(5)
                     eb:SetNumeric(true)
-                    eb:SetText(tostring(AlwinPack:GetRuleThreshold(rule.id, rule.defaultThreshold)))
+                    eb:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                     eb:SetCursorPosition(0)
                     
                     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
                     eb:SetScript("OnEnterPressed", function(self)
-                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
+                        Prepped:SetRuleThreshold(rule.id, self:GetNumber())
                         self:ClearFocus()
-                        AlwinPack:CheckReminders()
+                        Prepped:CheckReminders()
                     end)
                     eb:SetScript("OnEditFocusLost", function(self)
-                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
-                        AlwinPack:CheckReminders()
+                        Prepped:SetRuleThreshold(rule.id, self:GetNumber())
+                        Prepped:CheckReminders()
                     end)
                     panel.editboxes[rule.id] = eb
                     
@@ -345,18 +346,18 @@ local function CreateOptionsPanel()
                     eb:SetAutoFocus(false)
                     eb:SetMaxLetters(5)
                     eb:SetNumeric(true)
-                    eb:SetText(tostring(AlwinPack:GetRuleThreshold(rule.id, rule.defaultThreshold)))
+                    eb:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                     eb:SetCursorPosition(0)
                     
                     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
                     eb:SetScript("OnEnterPressed", function(self)
-                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
+                        Prepped:SetRuleThreshold(rule.id, self:GetNumber())
                         self:ClearFocus()
-                        AlwinPack:CheckReminders()
+                        Prepped:CheckReminders()
                     end)
                     eb:SetScript("OnEditFocusLost", function(self)
-                        AlwinPack:SetRuleThreshold(rule.id, self:GetNumber())
-                        AlwinPack:CheckReminders()
+                        Prepped:SetRuleThreshold(rule.id, self:GetNumber())
+                        Prepped:CheckReminders()
                     end)
                     panel.editboxes[rule.id] = eb
                     
@@ -376,13 +377,13 @@ local function CreateOptionsPanel()
     SelectGroup(1)
 
     panel.refresh = function()
-        for _, rule in ipairs(AlwinPack.AllRules) do
+        for _, rule in ipairs(Prepped.AllRules) do
             local cb = panel.checkboxes[rule.id]
-            if cb then cb:SetChecked(AlwinPack:IsRuleEnabled(rule.id)) end
+            if cb then cb:SetChecked(Prepped:IsRuleEnabled(rule.id)) end
             
             local eb = panel.editboxes[rule.id]
             if eb and rule.defaultThreshold then
-                eb:SetText(tostring(AlwinPack:GetRuleThreshold(rule.id, rule.defaultThreshold)))
+                eb:SetText(tostring(Prepped:GetRuleThreshold(rule.id, rule.defaultThreshold)))
                 eb:SetCursorPosition(0)
             end
         end
@@ -413,7 +414,7 @@ local function CreateOptionsPanel()
         -- This is for the 2026 Anniversary/Modern client
         local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name, panel.name)
         Settings.RegisterAddOnCategory(category)
-        AlwinPack.settingsCategory = category -- SAVE THIS FOR THE SLASH COMMAND
+        Prepped.settingsCategory = category -- SAVE THIS FOR THE SLASH COMMAND
     elseif InterfaceOptions_AddCategory then
         -- Legacy fallback
         InterfaceOptions_AddCategory(panel)
@@ -422,21 +423,21 @@ end
 
 CreateOptionsPanel()
 
-function AlwinPack:InitializeDefaults()
+function Prepped:InitializeDefaults()
     EnsureSettings()
     for _, rule in ipairs(self.AllRules) do
         -- Initialize Thresholds and Low Enabled
         if rule.defaultThreshold then
-            if AlwinPackSettings.thresholds[rule.id] == nil then
-                 AlwinPackSettings.thresholds[rule.id] = rule.defaultThreshold
+            if PreppedSettings.thresholds[rule.id] == nil then
+                 PreppedSettings.thresholds[rule.id] = rule.defaultThreshold
             end
-            if AlwinPackSettings.enabledLowRules[rule.id] == nil then
-                 AlwinPackSettings.enabledLowRules[rule.id] = true
+            if PreppedSettings.enabledLowRules[rule.id] == nil then
+                 PreppedSettings.enabledLowRules[rule.id] = true
             end
         end
         -- Initialize Enabled State (Default to true)
-        if AlwinPackSettings.enabledRules[rule.id] == nil then
-            AlwinPackSettings.enabledRules[rule.id] = true
+        if PreppedSettings.enabledRules[rule.id] == nil then
+            PreppedSettings.enabledRules[rule.id] = true
         end
     end
 end
@@ -453,13 +454,13 @@ container:RegisterEvent("SPELLS_CHANGED")
 container:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local addonName = ...
-        if addonName == "AlwinPack" then
-            AlwinPack:InitializeDefaults()
+        if addonName == "Prepped" then
+            Prepped:InitializeDefaults()
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
-        AlwinPack:ShowWelcomeMessage()
+        Prepped:ShowWelcomeMessage()
     end
-    AlwinPack:CheckReminders()
+    Prepped:CheckReminders()
 end)
 
-_G.AlwinPack = AlwinPack
+_G.Prepped = Prepped

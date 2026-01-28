@@ -27,7 +27,7 @@ local hunterReminders = {
 
 local lines = {}
 local function CreateReminderLine(index)
-    local container = _G.AlwinPackContainer
+    local container = _G.PreppedContainer
     local f = CreateFrame("Frame", nil, container)
     f:SetSize(400, 30)
     f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
@@ -62,7 +62,7 @@ function HunterReminders.CheckReminders()
     for _, line in ipairs(lines) do line:Hide() end
     local activeCount = 0
     for _, config in ipairs(hunterReminders) do
-        if not (AlwinPack and config.id and not AlwinPack:IsRuleEnabled(config.id)) then
+        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
             if config.mustRest and not isResting then trigger = false end
@@ -72,8 +72,8 @@ function HunterReminders.CheckReminders()
                 local count = GetCurrentAmmoCount()
                 if not count then trigger = false else
                     local userThreshold = 0
-                    if AlwinPack and AlwinPack.GetRuleThreshold then
-                        userThreshold = AlwinPack:GetRuleThreshold(config.id)
+                    if Prepped and Prepped.GetRuleThreshold then
+                        userThreshold = Prepped:GetRuleThreshold(config.id)
                     end
                     
                     local threshold = userThreshold
@@ -101,6 +101,6 @@ function HunterReminders.CheckReminders()
     end
 end
 
-if AlwinPack then
-    AlwinPack:RegisterReminderModule(HunterReminders)
+if Prepped then
+    Prepped:RegisterReminderModule(HunterReminders)
 end

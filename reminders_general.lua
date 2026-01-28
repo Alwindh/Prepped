@@ -14,7 +14,7 @@ local generalRules = {
 
 local lines = {}
 local function CreateReminderLine(index)
-    local container = _G.AlwinPackContainer
+    local container = _G.PreppedContainer
     local f = CreateFrame("Frame", nil, container)
     f:SetSize(400, 30)
     f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
@@ -63,7 +63,7 @@ function GeneralReminders.CheckReminders()
     local activeCount = 0
     
     for _, config in ipairs(generalRules) do
-        if not (AlwinPack and config.id and not AlwinPack:IsRuleEnabled(config.id)) then
+        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
             
@@ -74,15 +74,15 @@ function GeneralReminders.CheckReminders()
 
             -- Min Level Check (if configured)
             if trigger and config.minLevelConfig then
-                 local minLevel = AlwinPack:GetRuleThreshold(config.minLevelConfig, 10)
+                 local minLevel = Prepped:GetRuleThreshold(config.minLevelConfig, 10)
                  if UnitLevel("player") < minLevel then trigger = false end
             end
             
             if trigger and config.checkWater then
                 local count = GetWaterCount()
                 local threshold = 0
-                if AlwinPack and AlwinPack.GetRuleThreshold then
-                     threshold = AlwinPack:GetRuleThreshold(config.id)
+                if Prepped and Prepped.GetRuleThreshold then
+                     threshold = Prepped:GetRuleThreshold(config.id)
                 end
                 
                 if count >= threshold then 
@@ -104,6 +104,6 @@ function GeneralReminders.CheckReminders()
     end
 end
 
-if AlwinPack then
-    AlwinPack:RegisterReminderModule(GeneralReminders)
+if Prepped then
+    Prepped:RegisterReminderModule(GeneralReminders)
 end

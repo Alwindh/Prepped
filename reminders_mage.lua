@@ -77,12 +77,12 @@ local mageReminders = {
 
 local lines = {}
 local function CreateReminderLine(index)
-    local container = _G.AlwinPackContainer
+    local container = _G.PreppedContainer
     local f = CreateFrame("Frame", nil, container)
     f:SetSize(400, 30)
     -- Align with other modules if possible, but for now just stacking them might overlap 
     -- if multiple modules trigger at once. 
-    -- Ideally AlwinPackContainer handles layout, but the current design seems to have each module manage its own lines attached to the container.
+    -- Ideally PreppedContainer handles layout, but the current design seems to have each module manage its own lines attached to the container.
     -- To avoid overlap, we might need a shared layout manager, but for now we follow the existing pattern.
     f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32 - 100) -- Offset slightly to avoid hiding other class reminders on top? 
     -- Actually, usually only one class module is active per character.
@@ -126,7 +126,7 @@ function MageReminders.CheckReminders()
 
     local activeCount = 0
     for _, config in ipairs(mageReminders) do
-        if not (AlwinPack and config.id and not AlwinPack:IsRuleEnabled(config.id)) then
+        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
 
@@ -155,8 +155,8 @@ function MageReminders.CheckReminders()
             if trigger and config.itemCheck then
                 local count = GetItemCount(config.itemCheck)
                 local threshold = 0
-                if AlwinPack and AlwinPack.GetRuleThreshold then
-                     threshold = AlwinPack:GetRuleThreshold(config.id)
+                if Prepped and Prepped.GetRuleThreshold then
+                     threshold = Prepped:GetRuleThreshold(config.id)
                 end
                 if count >= threshold then 
                     trigger = false 
@@ -177,6 +177,6 @@ function MageReminders.CheckReminders()
     end
 end
 
-if AlwinPack then
-    AlwinPack:RegisterReminderModule(MageReminders)
+if Prepped then
+    Prepped:RegisterReminderModule(MageReminders)
 end

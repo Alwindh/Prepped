@@ -1,12 +1,12 @@
 ## Interface: 20504
-## Title: AlwinPack
+## Title: Prepped
 ## Notes: Simple reminders for the squad (Ankhs, Poisons, Repairs)
-## Author: Spacer
-## Version: 1.2.0
+## Author: Excessive
+## Version: 1.3.0
 
-## SavedVariables: AlwinPackSettings
+## SavedVariables: PreppedSettings
 
-alwinpack.lua
+prepped.lua
 reminders_core.lua
 reminders_general.lua
 reminders_multiclass.lua
