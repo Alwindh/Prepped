@@ -2,48 +2,93 @@ local Prepped = {}
 Prepped.reminderModules = {}
 
 -- Settings
+-- Settings
 local function EnsureSettings()
     if not PreppedSettings then PreppedSettings = {} end
-    if not PreppedSettings.enabledRules then PreppedSettings.enabledRules = {} end
-    if not PreppedSettings.enabledLowRules then PreppedSettings.enabledLowRules = {} end
-    if not PreppedSettings.thresholds then PreppedSettings.thresholds = {} end
+    
+    -- Migration / Initialization of new structure
+    if PreppedSettings.useAccountWide == nil then
+        PreppedSettings.useAccountWide = true
+    end
+    
+    if not PreppedSettings.global then
+        PreppedSettings.global = {}
+        -- Migrate old top-level settings to global
+        if PreppedSettings.enabledRules then
+            PreppedSettings.global.enabledRules = PreppedSettings.enabledRules
+            PreppedSettings.enabledRules = nil
+        end
+        if PreppedSettings.enabledLowRules then
+            PreppedSettings.global.enabledLowRules = PreppedSettings.enabledLowRules
+            PreppedSettings.enabledLowRules = nil
+        end
+        if PreppedSettings.thresholds then
+            PreppedSettings.global.thresholds = PreppedSettings.thresholds
+            PreppedSettings.thresholds = nil
+        end
+    end
+    
+    if not PreppedSettings.global.enabledRules then PreppedSettings.global.enabledRules = {} end
+    if not PreppedSettings.global.enabledLowRules then PreppedSettings.global.enabledLowRules = {} end
+    if not PreppedSettings.global.thresholds then PreppedSettings.global.thresholds = {} end
+    
+    if not PreppedSettings.profiles then PreppedSettings.profiles = {} end
+    
+    local charKey = UnitName("player") .. " - " .. GetRealmName()
+    if not PreppedSettings.profiles[charKey] then
+        PreppedSettings.profiles[charKey] = {
+            enabledRules = {},
+            enabledLowRules = {},
+            thresholds = {}
+        }
+    end
+end
+
+local function GetCurrentProfile()
+    EnsureSettings()
+    if PreppedSettings.useAccountWide then
+        return PreppedSettings.global
+    else
+        local charKey = UnitName("player") .. " - " .. GetRealmName()
+        return PreppedSettings.profiles[charKey]
+    end
 end
 
 function Prepped:IsRuleEnabled(ruleId)
-    EnsureSettings()
+    local profile = GetCurrentProfile()
     
-    -- Master Switch Logic
-    local master = PreppedSettings.enabledRules["general_master"]
+    -- Master Switch Logic (Handled globally or per profile)
+    local master = profile.enabledRules["general_master"]
     if master == nil then master = true end -- Default ON
     
     if ruleId == "general_master" then return master end
     if not master then return false end
 
-    local enabled = PreppedSettings.enabledRules[ruleId]
+    local enabled = profile.enabledRules[ruleId]
     if enabled == nil then return true end -- default: enabled
     return enabled
 end
 
 function Prepped:SetRuleEnabled(ruleId, enabled)
-    EnsureSettings()
-    PreppedSettings.enabledRules[ruleId] = enabled
+    local profile = GetCurrentProfile()
+    profile.enabledRules[ruleId] = enabled
 end
 
 function Prepped:IsLowEnabled(ruleId)
-    EnsureSettings()
-    local enabled = PreppedSettings.enabledLowRules[ruleId]
+    local profile = GetCurrentProfile()
+    local enabled = profile.enabledLowRules[ruleId]
     if enabled == nil then return true end -- Default to TRUE for low warnings if not set
     return enabled
 end
 
 function Prepped:SetLowEnabled(ruleId, enabled)
-    EnsureSettings()
-    PreppedSettings.enabledLowRules[ruleId] = enabled
+    local profile = GetCurrentProfile()
+    profile.enabledLowRules[ruleId] = enabled
 end
 
 function Prepped:GetRuleThreshold(ruleId, default)
-    EnsureSettings()
-    local val = PreppedSettings.thresholds[ruleId]
+    local profile = GetCurrentProfile()
+    local val = profile.thresholds[ruleId]
     if val ~= nil then return val end
     
     if default then return default end
@@ -58,13 +103,54 @@ function Prepped:GetRuleThreshold(ruleId, default)
 end
 
 function Prepped:SetRuleThreshold(ruleId, value)
-    EnsureSettings()
+    local profile = GetCurrentProfile()
     local num = tonumber(value) or 0
     if ruleId == "general_repair" then
         num = math.min(100, math.max(0, num))
     end
-    PreppedSettings.thresholds[ruleId] = num
+    profile.thresholds[ruleId] = num
 end
+
+-- Profile Management Functions
+function Prepped:IsAccountWide()
+    EnsureSettings()
+    return PreppedSettings.useAccountWide
+end
+
+function Prepped:SetAccountWide(enabled)
+    EnsureSettings()
+    PreppedSettings.useAccountWide = enabled
+end
+
+function Prepped:ClearCharacterSettings()
+    local charKey = UnitName("player") .. " - " .. GetRealmName()
+    PreppedSettings.profiles[charKey] = {
+        enabledRules = {},
+        enabledLowRules = {},
+        thresholds = {}
+    }
+end
+
+-- Warning Dialog for switching to Account-wide
+StaticPopupDialogs["PREPPED_CONFIRM_ACCOUNT_WIDE"] = {
+    text = "Are you sure you want to enable Account-wide settings? Your current character-specific settings will be cleared for this character.",
+    button1 = "Yes",
+    button2 = "No",
+    OnAccept = function()
+        Prepped:ClearCharacterSettings()
+        Prepped:SetAccountWide(true)
+        if PreppedOptionsPanel then PreppedOptionsPanel.refresh() end
+        Prepped:CheckReminders()
+    end,
+    OnCancel = function()
+        if PreppedOptionsPanel and PreppedOptionsPanel.checkboxes["general_account_wide"] then
+            PreppedOptionsPanel.checkboxes["general_account_wide"]:SetChecked(false)
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
 
 -- Slash command to open options menu
 SLASH_PREPPED1 = "/prepped"
@@ -143,12 +229,13 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.3.4|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.4.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
 Prepped.AllRules = {
     { id = "general_master", label = "Enable Prepped", group = "General", description = "Toggle the entire addon on or off." },
+    { id = "general_account_wide", label = "Use Account-wide Settings", group = "General", description = "If enabled, settings are shared across all characters. If disabled, each character has their own config." },
     { id = "general_welcome", label = "Show Welcome Message", group = "General", description = "Show the loaded message when logging in." },
     { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 40, description = "Show a warning when your Water count drops below specific threshold if you are a mana user." },
     { id = "general_water_minlevel", label = "Water Min Level", group = "General", defaultThreshold = 10, description = "Minimum level required to show the Buy Water reminder." },
@@ -290,9 +377,26 @@ local function CreateOptionsPanel()
             cb:SetPoint("TOPLEFT", 10, -8)
             cb.Text:SetText(rule.label)
             cb:SetChecked(Prepped:IsRuleEnabled(rule.id))
+            
+            if rule.id == "general_account_wide" then
+                cb:SetChecked(Prepped:IsAccountWide())
+            end
+
             cb:SetScript("OnClick", function(self)
-                Prepped:SetRuleEnabled(rule.id, self:GetChecked())
-                Prepped:CheckReminders()
+                if rule.id == "general_account_wide" then
+                    if self:GetChecked() then
+                        -- Switching to Account-wide: Warning
+                        StaticPopup_Show("PREPPED_CONFIRM_ACCOUNT_WIDE")
+                    else
+                        -- Switching to Character: No warning needed
+                        Prepped:SetAccountWide(false)
+                        panel.refresh()
+                        Prepped:CheckReminders()
+                    end
+                else
+                    Prepped:SetRuleEnabled(rule.id, self:GetChecked())
+                    Prepped:CheckReminders()
+                end
             end)
 
             panel.checkboxes[rule.id] = cb
@@ -428,7 +532,13 @@ local function CreateOptionsPanel()
     panel.refresh = function()
         for _, rule in ipairs(Prepped.AllRules) do
             local cb = panel.checkboxes[rule.id]
-            if cb then cb:SetChecked(Prepped:IsRuleEnabled(rule.id)) end
+            if cb then 
+                if rule.id == "general_account_wide" then
+                    cb:SetChecked(Prepped:IsAccountWide())
+                else
+                    cb:SetChecked(Prepped:IsRuleEnabled(rule.id)) 
+                end
+            end
             
             local eb = panel.editboxes[rule.id]
             if eb and rule.defaultThreshold then
@@ -474,19 +584,22 @@ CreateOptionsPanel()
 
 function Prepped:InitializeDefaults()
     EnsureSettings()
+    local profile = GetCurrentProfile()
     for _, rule in ipairs(self.AllRules) do
-        -- Initialize Thresholds and Low Enabled
-        if rule.defaultThreshold then
-            if PreppedSettings.thresholds[rule.id] == nil then
-                 PreppedSettings.thresholds[rule.id] = rule.defaultThreshold
+        if rule.id ~= "general_account_wide" then
+            -- Initialize Thresholds and Low Enabled
+            if rule.defaultThreshold then
+                if profile.thresholds[rule.id] == nil then
+                     profile.thresholds[rule.id] = rule.defaultThreshold
+                end
+                if profile.enabledLowRules[rule.id] == nil then
+                     profile.enabledLowRules[rule.id] = true
+                end
             end
-            if PreppedSettings.enabledLowRules[rule.id] == nil then
-                 PreppedSettings.enabledLowRules[rule.id] = true
+            -- Initialize Enabled State (Default to true)
+            if profile.enabledRules[rule.id] == nil then
+                profile.enabledRules[rule.id] = true
             end
-        end
-        -- Initialize Enabled State (Default to true)
-        if PreppedSettings.enabledRules[rule.id] == nil then
-            PreppedSettings.enabledRules[rule.id] = true
         end
     end
 end
