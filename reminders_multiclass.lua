@@ -4,7 +4,7 @@ local MultiClassReminders = {}
 local multiclassReminders = {
     {
         id = "general_repair",
-        message = "REPAIR YOUR GEAR!",
+        message = "Repair your gear",
         repairCheck = true,
         mustRest = true,
     },

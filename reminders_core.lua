@@ -32,6 +32,14 @@ local function EnsureSettings()
     if not PreppedSettings.global.enabledLowRules then PreppedSettings.global.enabledLowRules = {} end
     if not PreppedSettings.global.thresholds then PreppedSettings.global.thresholds = {} end
     
+    if not PreppedSettings.appearance then
+        PreppedSettings.appearance = {}
+    end
+    if not PreppedSettings.appearance.fontSize then PreppedSettings.appearance.fontSize = 18 end
+    if not PreppedSettings.appearance.minWidth then PreppedSettings.appearance.minWidth = 400 end
+    if not PreppedSettings.appearance.fontColor then PreppedSettings.appearance.fontColor = { r = 1, g = 0.82, b = 0 } end
+    if not PreppedSettings.appearance.bgColor then PreppedSettings.appearance.bgColor = { r = 0, g = 0, b = 0, a = 0.5 } end
+
     if not PreppedSettings.profiles then PreppedSettings.profiles = {} end
     
     local charKey = UnitName("player") .. " - " .. GetRealmName()
@@ -152,6 +160,29 @@ StaticPopupDialogs["PREPPED_CONFIRM_ACCOUNT_WIDE"] = {
     hideOnEscape = true,
 }
 
+function Prepped:ResetAllSettings()
+    _G.PreppedSettings = nil
+    EnsureSettings()
+    self:ApplyAppearance()
+    if PreppedOptionsPanel then 
+        PreppedOptionsPanel.refresh() 
+    end
+    print("|cffff8000Prepped:|r All settings have been reset to default.")
+end
+
+StaticPopupDialogs["PREPPED_RESET_ALL_SETTINGS"] = {
+    text = "Are you sure you want to reset ALL Prepped settings? This will clear all account-wide settings, character-specific profiles, and appearance customizations.",
+    button1 = "Reset Everything",
+    button2 = "Cancel",
+    OnAccept = function()
+        Prepped:ResetAllSettings()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    showAlert = true,
+}
+
 -- Slash command to open options menu
 SLASH_PREPPED1 = "/prepped"
 SLASH_PREPPED2 = "/prepped"
@@ -184,6 +215,39 @@ end
 Prepped.displayLines = {}
 Prepped.activeCount = 0
 
+function Prepped:GetAppearance()
+    EnsureSettings()
+    return PreppedSettings.appearance
+end
+
+function Prepped:ApplyAppearance()
+    local app = self:GetAppearance()
+    local fontPath, _, fontFlags = GameFontNormalLarge:GetFont() -- Fallback to game default font
+    
+    for i, line in ipairs(self.displayLines) do
+        -- Update Background
+        if line.bg then
+            line.bg:SetColorTexture(app.bgColor.r, app.bgColor.g, app.bgColor.b, app.bgColor.a or 0.5)
+        end
+        
+        -- Update Text
+        if line.text then
+            line.text:SetFont(fontPath, app.fontSize, "OUTLINE")
+            local tr, tg, tb = app.fontColor.r or 1, app.fontColor.g or 0.82, app.fontColor.b or 0
+            line.text:SetTextColor(tr, tg, tb, 1)
+        end
+        
+        -- Update Sizing and Positioning
+        local minWidth = app.minWidth or 400
+        local textWidth = (line.text and line.text:GetUnboundedStringWidth()) or 0
+        local width = math.max(minWidth, textWidth + 40)
+        
+        line:SetSize(width, app.fontSize + 12)
+        line:ClearAllPoints()
+        line:SetPoint("TOP", _G.PreppedContainer, "TOP", 0, -(i - 1) * (app.fontSize + 14))
+    end
+end
+
 function Prepped:GetNextLine()
     self.activeCount = self.activeCount + 1
     local index = self.activeCount
@@ -192,18 +256,27 @@ function Prepped:GetNextLine()
         if not container then return nil end
         
         local f = CreateFrame("Frame", nil, container)
-        f:SetSize(400, 30)
-        f:SetPoint("TOP", container, "TOP", 0, -(index - 1) * 32)
         
         local bg = f:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints()
-        bg:SetColorTexture(0, 0, 0, 0.5)
+        f.bg = bg
         
         local txt = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         txt:SetPoint("CENTER")
         f.text = txt
         
+        -- Hook SetText to handle dynamic width resizing
+        local originalSetText = txt.SetText
+        txt.SetText = function(self, msg)
+            originalSetText(self, msg)
+            local app = Prepped:GetAppearance()
+            local textWidth = self:GetUnboundedStringWidth()
+            local width = math.max(app.minWidth or 400, textWidth + 40)
+            f:SetWidth(width)
+        end
+        
         self.displayLines[index] = f
+        self:ApplyAppearance() -- Apply styles to the new line
     end
     return self.displayLines[index]
 end
@@ -229,7 +302,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.4.2|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.5.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -253,6 +326,7 @@ Prepped.AllRules = {
     { id = "mage_rune_portals", label = "Low Runes of Portals", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Runes of Portals count drops below the configured threshold when resting." },
     { id = "mage_ai_buff", label = "Missing Arcane Intellect Buff", group = "Mage", description = "Reminds you to buff yourself with Arcane Intellect." },
     { id = "mage_armor_buff", label = "Missing Armor Buff", group = "Mage", description = "Reminds you to buff yourself with an Armor buff." },
+    { id = "mage_mana_gem", label = "Missing Mana Gem", group = "Mage", description = "Reminds you to conjure a Mana Gem if you are not resting and don't have one." },
     { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 8, description = "Show a warning when your Ankhs count drops below the configured threshold." },
     { id = "shaman_fish_oil", label = "Buy Fish Oil", group = "Shaman", defaultThreshold = 10, description = "Show a warning when your Fish Oil count drops below the configured threshold." },
     { id = "shaman_fish_scales", label = "Buy Fish Scales", group = "Shaman", defaultThreshold = 10, description = "Show a warning when your Fish Scales count drops below the configured threshold." },
@@ -280,6 +354,7 @@ local function CreateOptionsPanel()
             table.insert(groups, rule.group)
         end
     end
+    table.insert(groups, "Appearance")
 
     -- 2. Create Content Box (Early allocation)
     -- Using BackdropTemplate because OptionsBoxTemplate might be missing in modern clients
@@ -530,6 +605,172 @@ local function CreateOptionsPanel()
             page.currentY = y - (height + 5)
         end
     end
+
+    -- 3.5 Add Reset Button to General Page
+    local genPage = panel.pages["General"]
+    if genPage then
+        local resetBtn = CreateFrame("Button", nil, genPage, "UIPanelButtonTemplate")
+        resetBtn:SetSize(140, 24)
+        resetBtn:SetPoint("BOTTOMLEFT", 10, 0)
+        resetBtn:SetText("Reset All Settings")
+        resetBtn:SetScript("OnClick", function()
+            StaticPopup_Show("PREPPED_RESET_ALL_SETTINGS")
+        end)
+        panel.resetBtn = resetBtn
+    end
+
+    -- 4. Create Appearance Page Controls
+    local appPage = panel.pages["Appearance"]
+    if appPage then
+        local app = Prepped:GetAppearance()
+        
+        local function CreateAppRow(height)
+            local y = appPage.currentY
+            local row = CreateFrame("Frame", nil, appPage, "BackdropTemplate")
+            row:SetPoint("TOPLEFT", 10, y)
+            row:SetPoint("RIGHT", -10, 0)
+            row:SetHeight(height)
+            if row.SetBackdrop then
+                row:SetBackdrop({
+                    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+                    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                    tile = true, tileSize = 16, edgeSize = 12,
+                    insets = { left = 3, right = 3, top = 3, bottom = 3 }
+                })
+                row:SetBackdropColor(0.1, 0.1, 0.1, 0.3)
+                row:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.5)
+            end
+            table.insert(panel.ruleFrames, row)
+            appPage.currentY = y - (height + 5)
+            return row
+        end
+
+        panel.colorButtons = {}
+        local function CreateColorButton(name, parent, colorKey, labelText)
+            local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+            btn:SetSize(24, 24)
+            btn:SetBackdrop({
+                bgFile = "Interface\\ChatFrame\\ChatFrameBackground", 
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", 
+                edgeSize = 8,
+                insets = { left = 2, right = 2, top = 2, bottom = 2 }
+            })
+            btn:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+            
+            local swatch = btn:CreateTexture(nil, "OVERLAY")
+            swatch:SetPoint("TOPLEFT", 3, -3)
+            swatch:SetPoint("BOTTOMRIGHT", -3, 3)
+            btn.swatch = swatch
+            btn.colorKey = colorKey
+            
+            local curApp = Prepped:GetAppearance()
+            local c = curApp[colorKey]
+            swatch:SetColorTexture(c.r, c.g, c.b, c.a or 1)
+            
+            local lbl = btn:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            lbl:SetPoint("LEFT", btn, "RIGHT", 10, 0)
+            lbl:SetText(labelText)
+            
+            table.insert(panel.colorButtons, btn)
+            
+            btn:SetScript("OnClick", function()
+                local curApp = Prepped:GetAppearance()
+                local c = curApp[colorKey]
+                
+                local r_old, g_old, b_old, a_old = c.r, c.g, c.b, (c.a or 1)
+
+                local function OnColorChanged()
+                    local r, g, b = ColorPickerFrame:GetColorRGB()
+                    local a = 1
+                    if ColorPickerFrame.hasOpacity then
+                        a = 1 - OpacitySliderFrame:GetValue()
+                    end
+                    
+                    local app = Prepped:GetAppearance()
+                    app[colorKey].r, app[colorKey].g, app[colorKey].b = r, g, b
+                    if app[colorKey].a ~= nil then app[colorKey].a = a end
+                    
+                    if btn.swatch then
+                        btn.swatch:SetColorTexture(r, g, b, a)
+                    end
+                    Prepped:ApplyAppearance()
+                end
+
+                ColorPickerFrame.func = OnColorChanged
+                ColorPickerFrame.opacityFunc = OnColorChanged
+                ColorPickerFrame.hasOpacity = (c.a ~= nil)
+                ColorPickerFrame.opacity = 1 - (c.a or 1)
+                ColorPickerFrame:SetColorRGB(c.r, c.g, c.b)
+                
+                ColorPickerFrame.cancelFunc = function()
+                    local app = Prepped:GetAppearance()
+                    app[colorKey].r, app[colorKey].g, app[colorKey].b, app[colorKey].a = r_old, g_old, b_old, a_old
+                    if btn.swatch then
+                        btn.swatch:SetColorTexture(r_old, g_old, b_old, a_old)
+                    end
+                    Prepped:ApplyAppearance()
+                end
+                
+                ColorPickerFrame:Hide() -- Toggle refresh
+                ColorPickerFrame:Show()
+            end)
+            return btn
+        end
+
+        -- Font Size row
+        local sizeRow = CreateAppRow(40)
+        local sizeSlider = CreateFrame("Slider", "PreppedFontSizeSlider", sizeRow, "OptionsSliderTemplate")
+        sizeSlider:SetPoint("LEFT", 10, 0)
+        sizeSlider:SetSize(200, 16)
+        sizeSlider:SetMinMaxValues(10, 40)
+        sizeSlider:SetValueStep(1)
+        sizeSlider:SetObeyStepOnDrag(true)
+        sizeSlider:SetValue(app.fontSize)
+        _G[sizeSlider:GetName().."Low"]:SetText("10")
+        _G[sizeSlider:GetName().."High"]:SetText("40")
+        _G[sizeSlider:GetName().."Text"]:SetText("Font Size: " .. app.fontSize)
+        
+        sizeSlider:SetScript("OnValueChanged", function(self, value)
+            local val = math.floor(value)
+            local curApp = Prepped:GetAppearance()
+            curApp.fontSize = val
+            _G[self:GetName().."Text"]:SetText("Font Size: " .. val)
+            Prepped:ApplyAppearance()
+        end)
+        panel.fontSizeSlider = sizeSlider
+
+        -- Minimum Width row
+        local widthRow = CreateAppRow(40)
+        local widthSlider = CreateFrame("Slider", "PreppedMinWidthSlider", widthRow, "OptionsSliderTemplate")
+        widthSlider:SetPoint("LEFT", 10, 0)
+        widthSlider:SetSize(200, 16)
+        widthSlider:SetMinMaxValues(100, 1200)
+        widthSlider:SetValueStep(10)
+        widthSlider:SetObeyStepOnDrag(true)
+        widthSlider:SetValue(app.minWidth or 400)
+        _G[widthSlider:GetName().."Low"]:SetText("100")
+        _G[widthSlider:GetName().."High"]:SetText("1200")
+        _G[widthSlider:GetName().."Text"]:SetText("Minimum Width: " .. (app.minWidth or 400))
+        
+        widthSlider:SetScript("OnValueChanged", function(self, value)
+            local val = math.floor(value)
+            local curApp = Prepped:GetAppearance()
+            curApp.minWidth = val
+            _G[self:GetName().."Text"]:SetText("Minimum Width: " .. val)
+            Prepped:ApplyAppearance()
+        end)
+        panel.minWidthSlider = widthSlider
+
+        -- Font Color row
+        local fontColorRow = CreateAppRow(40)
+        local fontColorBtn = CreateColorButton("FontColor", fontColorRow, "fontColor", "Font Color")
+        fontColorBtn:SetPoint("LEFT", 10, 0)
+
+        -- Background Color row
+        local bgColorRow = CreateAppRow(40)
+        local bgColorBtn = CreateColorButton("BgColor", bgColorRow, "bgColor", "Background Color (with Opacity)")
+        bgColorBtn:SetPoint("LEFT", 10, 0)
+    end
     
     -- Initialize
     SelectGroup(1)
@@ -551,6 +792,26 @@ local function CreateOptionsPanel()
                 eb:SetCursorPosition(0)
             end
         end
+
+        if panel.fontSizeSlider then
+            local app = Prepped:GetAppearance()
+            panel.fontSizeSlider:SetValue(app.fontSize)
+        end
+
+        if panel.minWidthSlider then
+            local app = Prepped:GetAppearance()
+            panel.minWidthSlider:SetValue(app.minWidth or 400)
+        end
+
+        if panel.colorButtons then
+            local app = Prepped:GetAppearance()
+            for _, btn in ipairs(panel.colorButtons) do
+                if btn.swatch and btn.colorKey then
+                    local c = app[btn.colorKey]
+                    btn.swatch:SetColorTexture(c.r, c.g, c.b, c.a or 1)
+                end
+            end
+        end
     end
     
     -- ElvUI Support (Lazy Load on Show)
@@ -558,18 +819,55 @@ local function CreateOptionsPanel()
         self.refresh()
         
         if not self.isSkinned and _G.ElvUI then
-             local E = _G.ElvUI[1]
-             if E then
-                 local S = E:GetModule("Skins")
-                 if S then
-                     for _, tab in ipairs(self.tabs) do S:HandleTab(tab) end
-                     for _, cb in pairs(self.checkboxes) do S:HandleCheckBox(cb) end
-                     for _, eb in pairs(self.editboxes) do S:HandleEditBox(eb) end
-                     if self.contentBox then S:HandleFrame(self.contentBox) end
-                     for _, row in ipairs(self.ruleFrames) do S:HandleFrame(row) end
-                     self.isSkinned = true
-                 end
-             end
+            local E = _G.ElvUI[1]
+            local S = E and E:GetModule("Skins")
+            if S then
+                local function SafeSkin(method, obj)
+                    if obj and S[method] then
+                        pcall(function() S[method](S, obj) end)
+                    end
+                end
+
+                for _, tab in ipairs(self.tabs) do SafeSkin("HandleTab", tab) end
+                for _, cb in pairs(self.checkboxes) do SafeSkin("HandleCheckBox", cb) end
+                for _, eb in pairs(self.editboxes) do SafeSkin("HandleEditBox", eb) end
+                
+                if self.fontSizeSlider then
+                    -- Standard ElvUI method is HandleSliderFrame
+                    if S.HandleSliderFrame then
+                        SafeSkin("HandleSliderFrame", self.fontSizeSlider)
+                        SafeSkin("HandleSliderFrame", self.minWidthSlider)
+                    elseif S.HandleSlider then
+                        SafeSkin("HandleSlider", self.fontSizeSlider)
+                        SafeSkin("HandleSlider", self.minWidthSlider)
+                    end
+                end
+
+                if self.colorButtons then
+                    for _, btn in ipairs(self.colorButtons) do 
+                        SafeSkin("HandleButton", btn) 
+                    end
+                end
+
+                if self.resetBtn then
+                    SafeSkin("HandleButton", self.resetBtn)
+                end
+
+                SafeSkin("HandleFrame", self.contentBox)
+                
+                if self.ruleFrames then
+                    for _, row in ipairs(self.ruleFrames) do 
+                        -- Some versions prefer HandleFrame, others HandleBackdrop for cards
+                        if S.HandleFrame then
+                            SafeSkin("HandleFrame", row)
+                        elseif S.HandleBackdrop then
+                            SafeSkin("HandleBackdrop", row)
+                        end
+                    end
+                end
+                
+                self.isSkinned = true
+            end
         end
     end)
 

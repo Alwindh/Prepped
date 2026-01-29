@@ -12,31 +12,47 @@ end
 
 local MageReminders = {}
 
+local MageManaGems = {
+    5514, -- Agate
+    5513, -- Jade
+    8007, -- Citrine
+    8008, -- Ruby
+    22044, -- Emerald
+}
+
+local MageConjureSpells = {
+    "Conjure Mana Agate",
+    "Conjure Mana Jade",
+    "Conjure Mana Citrine",
+    "Conjure Mana Ruby",
+    "Conjure Mana Emerald",
+}
+
 local mageReminders = {
     {
         id = "mage_ai_buff",
-        message = "BUFF YOURSELF: Arcane Intellect!",
+        message = "Buff Missing: Arcane Intellect",
         mustRest = false,
         requiredSpell = "Arcane Intellect",
         missingBuffs = {"Arcane Intellect", "Arcane Brilliance"},
     },
         {
             id = "mage_armor_buff",
-            message = "BUFF YOURSELF: Armor!",
+            message = "Buff Missing: Mage Armor",
             mustRest = false,
             requiredAnySpell = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
             missingBuffs = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
         },
     {
         id = "mage_powder",
-        message = "LOW ARCANE POWDER (%s left!)", -- %s will be replaced by the number
+        message = "Low on reagents: Arcane Powder (%s left!)", -- %s will be replaced by the number
         itemCheck = 17020, -- Arcane Powder
         mustRest = true,
         requiredSpell = "Arcane Brilliance" 
     },
     {
         id = "mage_rune_teleport",
-        message = "LOW RUNE OF TELEPORTATION (%s left!)",
+        message = "Low on reagents: Rune of Teleportation (%s left!)",
         itemCheck = 17031, -- Rune of Teleportation
         mustRest = true,
         requiredAnySpell = {
@@ -55,7 +71,7 @@ local mageReminders = {
     },
         {
         id = "mage_rune_portals",
-        message = "LOW RUNE OF PORTALS (%s left!)",
+        message = "Low on reagents: Rune of Portals (%s left!)",
         itemCheck = 17032, -- Rune of Portals
         mustRest = true,
         requiredAnySpell = {
@@ -71,6 +87,12 @@ local mageReminders = {
             "Portal: Silvermoon",
             "Portal: Shattrath"
         }
+    },
+    {
+        id = "mage_mana_gem",
+        message = "Missing item: Mana Gem",
+        mustRest = false,
+        manaGemCheck = true,
     },
     
 }
@@ -137,6 +159,24 @@ function MageReminders.CheckReminders()
                     trigger = false 
                 else
                     displayMessage = string.format(config.message, count)
+                end
+            end
+            
+            -- Mana Gem Check
+            if trigger and config.manaGemCheck then
+                -- 1. Check if ANY conjure spell is learned
+                if not IsAnySpellLearned(MageConjureSpells) then
+                    trigger = false
+                else
+                    -- 2. Check if ANY mana gem is in bags
+                    local hasGem = false
+                    for _, gemID in ipairs(MageManaGems) do
+                        if GetItemCount(gemID) > 0 then
+                            hasGem = true
+                            break
+                        end
+                    end
+                    if hasGem then trigger = false end
                 end
             end
 

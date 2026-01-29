@@ -4,7 +4,7 @@ local GeneralReminders = {}
 local generalRules = {
     {
         id = "general_water",
-        message = "BUY WATER! (%s left)",
+        message = "Low on water (%s left)",
         mustRest = true,
         onlyMana = true,
         checkWater = true,

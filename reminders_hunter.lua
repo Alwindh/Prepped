@@ -4,39 +4,39 @@ local HunterReminders = {}
 local hunterReminders = {
     {
         id = "hunter_ammo_critical",
-        message = "CRITICAL AMMO (%s left!)",
+        message = "Critically low on ammo (%s left)",
         ammoCheck = true,
         mustNotRest = true,
         minCount = 200,
     },
     {
         id = "hunter_ammo_low",
-        message = "LOW AMMO (%s left!)",
+        message = "Low on ammo (%s left)",
         ammoCheck = true,
         mustRest = true,
         minCount = 1000,
     },
     {
         id = "hunter_aspect",
-        message = "MISSING ASPECT!",
+        message = "Buff missing: Aspect",
         mustNotRest = true,
         requireOneSpell = { 13163, 13165 },
         missingBuffs = { 13163, 13165, 5118, 13161, 13155, 20043, 20190, 34074 }
     },
     {
         id = "hunter_no_pet",
-        message = "NO PET ACTIVE!",
+        message = "No pet active",
         mustNotRest = true,
         petCheck = true,
     },
     {
         id = "hunter_pet_unhappy",
-        message = "PET IS UNHAPPY!",
+        message = "Pet is unhappy",
         petHappinessCheck = true,
     },
     {
         id = "hunter_pet_food",
-        message = "LOW PET FOOD! (%s left)",
+        message = "Low on pet food (%s left)",
         mustRest = true,
         petFoodCheck = true,
     },
