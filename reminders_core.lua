@@ -229,7 +229,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.4.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.4.2|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -243,6 +243,11 @@ Prepped.AllRules = {
     { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, description = "Show a warning when your ammo count drops below the configured threshold when resting." },
     { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, description = "Show a warning when your ammo count drops below the critical threshold at any time." },
     { id = "hunter_aspect", label = "Missing Aspect", group = "Hunter", description = "Reminds you to have an Aspect buff active." },
+    { id = "hunter_no_pet", label = "Missing Pet", group = "Hunter", description = "Reminds you to have your pet active if you know Tame Beast and are not resting." },
+    { id = "hunter_pet_unhappy", label = "Unhappy Pet", group = "Hunter", description = "Reminds you to feed your pet if it is unhappy." },
+    { id = "hunter_pet_food", label = "Low Pet Food", group = "Hunter", defaultThreshold = 20, description = "Show a warning when you have little food in your bags that your active pet can eat while resting." },
+
+
     { id = "mage_powder", label = "Low Arcane Powder", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Arcane Powder count drops below the configured threshold when resting." },
     { id = "mage_rune_teleport", label = "Low Runes of Teleportation", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Runes of Teleportation count drops below the configured threshold when resting." },
     { id = "mage_rune_portals", label = "Low Runes of Portals", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Runes of Portals count drops below the configured threshold when resting." },
@@ -612,6 +617,13 @@ container:RegisterEvent("PLAYER_UPDATE_RESTING")
 container:RegisterEvent("UNIT_INVENTORY_CHANGED")
 container:RegisterEvent("UNIT_AURA")
 container:RegisterEvent("SPELLS_CHANGED")
+container:RegisterEvent("UNIT_PET")
+container:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+container:RegisterEvent("UNIT_HAPPINESS")
+container:RegisterEvent("UNIT_HEALTH")
+container:RegisterEvent("PET_UI_UPDATE")
+container:RegisterEvent("UNIT_STATS")
+container:RegisterEvent("PLAYER_ALIVE")
 
 container:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
