@@ -1,56 +1,77 @@
 # Prepped
 
-**Prepped** is a lightweight, modular addon for WoW Classic/Anniversary that helps you avoid common mistakes by providing clear, non-intrusive reminders for missing buffs, low consumables, and other essentials.
+**Prepped** is a modular, "set-it-and-forget-it" reminder addon for WoW Classic/Anniversary. It helps you avoid common mistakes—like walking into a dungeon without water or pulling a boss without your pet—by providing clear, non-intrusive, and highly configurable alerts.
 
 ---
 
-## What Does Prepped Remind You About?
+## Configuration and Options
 
-### Universal Reminders (All Classes)
-- **Repair Reminder**: Alerts you to repair your gear when durability drops below your chosen threshold (only while resting).
-- **Water Reminder**: Mana users are reminded to buy more water if they have less than your configured amount (only while resting, and only if you use mana).
+Access the settings menu in-game via `/prepped`.
 
-### Hunter Reminders
-- **Critical Ammo**: Warns you anytime your ammo drops below a critical threshold (default: 200).
-- **Low Ammo**: Warns you while resting if your ammo is low (default: 1000).
-- **Missing Aspect**: Reminds you if you do not have any Aspect buff active (e.g., Hawk, Cheetah, etc.).
-- **No Pet Active**: Alerts you if you do not have a pet out (and you know Tame Beast).
-- **Pet Unhappy**: Warns you if your pet is unhappy.
-- **Low Pet Food**: Reminds you while resting if you have less than your configured amount of food for your pet's diet.
+### Global Settings
+- **Master Toggle**: Enable or disable the entire addon with one click.
+- **Account-Wide vs. Character-Specific**: Choose whether your settings (thresholds, enabled rules, etc.) apply to all your characters or if each character has their own unique configuration.
+- **Reset All Settings**: A safety-locked button to revert everything to factory defaults.
+- **Welcome Message**: Toggle the "Prepped Loaded" message when you log in.
 
-### Mage Reminders
-- **Missing Arcane Intellect**: Alerts you if you do not have Arcane Intellect or Arcane Brilliance buff.
-- **Missing Armor Buff**: Reminds you if you do not have any Mage Armor buff (e.g., Ice Armor, Mage Armor, etc.).
-- **Low Arcane Powder**: Warns you while resting if you have less than your configured amount of Arcane Powder (for Arcane Brilliance).
-- **Low Rune of Teleportation**: Warns you while resting if you have less than your configured amount of Runes of Teleportation (for Teleport spells).
-- **Low Rune of Portals**: Warns you while resting if you have less than your configured amount of Runes of Portals (for Portal spells).
-
-### Shaman Reminders
-- **Missing Shield Buff**: Reminds you if you do not have Water Shield or Lightning Shield active (only while not resting).
-- **Missing Weapon Buffs**: Alerts Enhancement/leveling Shamans if you are missing weapon imbues (checks both main and offhand for dual-wielders, only while not resting).
-- **Low Ankh**: Reminds you while resting if you have less than your configured amount of Ankhs (for Reincarnation).
-- **Low Fish Oil**: Reminds you while resting if you have less than your configured amount of Fish Oil (for Water Walking).
-- **Low Fish Scales**: Reminds you while resting if you have less than your configured amount of Fish Scales (for Water Shield).
-- **Buff/Weapon Buff Running Low**: Optionally, you can be warned when your shield or weapon buffs are about to expire (configurable duration threshold).
+### UI and Appearance
+Personalize the alerts to match your UI:
+- **Font Size**: Scale the reminder text from subtle to unmissable (10pt to 40pt).
+- **Minimum Width**: Set a minimum bar width, or let the bars grow dynamically to fit the text length.
+- **Custom Colors**: Full Color Picker support for:
+  - **Font Color**: Set any color for your alerts.
+  - **Background Color and Opacity**: Choose the bar color and transparency (e.g., solid black or subtle glassmorphism).
 
 ---
 
-## How Do Reminders Work?
-- **Smart Stacking**: All reminders stack vertically and never overlap, so you always see every alert.
-- **Resting Logic**: Most supply reminders only trigger while you are in an Inn or Capital City, so you are not bothered while questing or raiding.
-- **Level Awareness**: Reminders only show if they are relevant for your current level and class.
+## Available Reminders
 
-## Configuration
-Type `/prepped` in-game to open the settings menu. You can:
-- Enable/disable individual reminders.
-- Set custom thresholds (e.g., "Warn me if I have less than 40 Water").
-- Configure durability % for repair warnings.
-- Toggle "Warn if low" for buffs to get a head start on re-buffing.
+### Universal (All Classes)
+- **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
+- **Water Reminder**: Reminds mana users to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
+
+### Hunter
+- **Critical Ammo**: A "Red Alert" that shows anytime your ammo drops below a critical point (e.g., 200).
+- **Low Ammo**: A reminder to stock up while **resting** if you have less than your desired stock (e.g., 1000).
+- **Missing Aspect**: Alerts you if you don't have an Aspect active (Hawk, Monkey, Cheetah, etc.).
+- **Missing Pet**: Warns you if your pet isn't out (only if you know *Tame Beast*).
+- **Unhappy Pet**: Reminds you to feed your pet if its happiness level drops.
+- **Low Pet Food**: Alerts you while **resting** if you have fewer than your configured amount of food items in your bags that your pet can actually eat.
+
+### Mage
+- **Missing Arcane Intellect**: Detects if you or your group are missing Intellect.
+- **Missing Armor Buff**: Reminds you to apply Frozen, Ice, Mage, or Molten Armor.
+- **Missing Mana Gem**: Alerts you to conjure a Mana Gem if you have the spell but no gem in your bags.
+- **Reagent Tracking**: Optional warnings while **resting** if you are low on:
+  - **Arcane Powder** (for Brilliance)
+  - **Rune of Teleportation**
+  - **Rune of Portals**
+
+### Shaman
+- **Missing Shield**: Alerts if Water Shield or Lightning Shield is missing.
+- **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
+  - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware.*
+- **Reagent Tracking**: Warnings while **resting** for:
+  - **Ankhs** (Reincarnation)
+  - **Fish Oil** (Water Walking)
+  - **Fish Scales** (Water Shield)
+- **"Warn if Low"**: A special toggle for Shields and Weapon buffs—reminds you to re-apply them *before* they expire (configurable seconds threshold).
+
+---
+
+## Smart Features
+
+- **Dynamic Logic**: Reminders only appear if you have learned the required spells and are at a relevant level.
+- **Resting Awareness**: Supply and repair reminders stay hidden while you are adventuring, only appearing when you reach a City or Inn.
+- **Non-Overlapping UI**: Alerts stack vertically and resize themselves to ensure every message is readable without cluttering your screen.
+
+---
 
 ## Installation
-1. Download the `Prepped.zip` from the latest release.
-2. Extract it into your `World of Warcraft/_classic_/Interface/AddOns/` folder.
-3. Ensure the folder is named `Prepped`.
-4. Or simply use CurseForge, WowUP, or any other addon manager.
 
-Or simply use CurseForge, WowUP, or any other addon manager.
+1. Download the latest release.
+2. Extract the folder into your `World of Warcraft/_classic_/Interface/AddOns/` directory.
+3. Ensure the folder is named exactly `Prepped`.
+4. (Optional) Install via **CurseForge** or **WowUP** for automatic updates.
+
+
