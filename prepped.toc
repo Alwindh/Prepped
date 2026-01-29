@@ -2,7 +2,7 @@
 ## Title: Prepped
 ## Notes: Simple reminders for chores (Reagents, buffs, repairs)
 ## Author: Excessive
-## Version: 1.5.0
+## Version: 1.6.0
 
 ## SavedVariables: PreppedSettings
 
@@ -13,3 +13,6 @@ reminders_multiclass.lua
 reminders_shaman.lua
 reminders_hunter.lua
 reminders_mage.lua
+reminders_rogue.lua
+reminders_warrior.lua
+reminders_paladin.lua

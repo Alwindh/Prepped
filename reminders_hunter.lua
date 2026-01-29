@@ -3,6 +3,11 @@ local HunterReminders = {}
 
 local hunterReminders = {
     {
+        id = "hunter_no_ammo",
+        message = "No ammo equipped",
+        noAmmoCheck = true,
+    },
+    {
         id = "hunter_ammo_critical",
         message = "Critically low on ammo (%s left)",
         ammoCheck = true,
@@ -42,11 +47,7 @@ local hunterReminders = {
     },
 }
 
-local function GetCurrentAmmoCount()
-    local itemID = GetInventoryItemID("player", 18)
-    if not itemID then return nil end
-    return GetInventoryItemCount("player", 0)
-end
+-- Getting ammo count moved to Prepped:GetAmmoCount() in core
 
 -- Hidden tooltip for scanning item food types
 local scanner = CreateFrame("GameTooltip", "PreppedScanner", nil, "GameTooltipTemplate")
@@ -160,17 +161,27 @@ function HunterReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
     if playerClass ~= "HUNTER" then return end
     local isResting = IsResting()
+    local criticalTriggered = false
+    local ammoCount = Prepped:GetAmmoCount()
+
     for _, config in ipairs(hunterReminders) do
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
             if config.mustRest and not isResting then trigger = false end
             if config.mustNotRest and isResting then trigger = false end
+
+            -- If we already showed a "No Ammo" or "Critical" warning, skip "Low"
+            if config.id == "hunter_ammo_low" and criticalTriggered then
+                trigger = false
+            end
             
             -- Ammo Logic
             if trigger and config.ammoCheck then
-                local count = GetCurrentAmmoCount()
-                if not count then trigger = false else
+                -- Suppress Low/Crit if count is 0 (handled by hunter_no_ammo) or if no weapon (nil)
+                if not ammoCount or ammoCount == 0 then 
+                    trigger = false 
+                else
                     local userThreshold = 0
                     if Prepped and Prepped.GetRuleThreshold then
                         userThreshold = Prepped:GetRuleThreshold(config.id)
@@ -181,8 +192,25 @@ function HunterReminders.CheckReminders()
                         threshold = math.max(userThreshold, config.minCountResting or 0)
                     end
                     
-                    if count >= threshold then trigger = false end
-                    displayMessage = string.format(config.message, count)
+                    if ammoCount >= threshold then 
+                        trigger = false 
+                    else
+                        -- If this is the critical warning and it triggered, mark it
+                        if config.id == "hunter_ammo_critical" then
+                            criticalTriggered = true
+                        end
+                    end
+                    displayMessage = string.format(config.message, ammoCount)
+                end
+            end
+
+            -- No Ammo Check
+            if trigger and config.noAmmoCheck then
+                if ammoCount ~= 0 then -- count == nil (no weapon) or count > 0 (has ammo)
+                    trigger = false
+                else
+                    -- If "No Ammo" triggered, also treat it as "critical" to suppress "Low"
+                    criticalTriggered = true
                 end
             end
             

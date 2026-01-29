@@ -47,6 +47,18 @@ Personalize the alerts to match your UI:
   - **Rune of Teleportation**
   - **Rune of Portals**
 
+### Paladin
+- **Missing Seal**: Triggers in combat if you don't have a Seal active (with built-in logic to suppress the warning after using *Judgement*).
+- **Missing Aura**: Ensures you always have a Paladin Aura active.
+- **Missing Blessing**: Reminds you to keep a Blessing active on yourself while adventuring.
+- **Reagent Tracking**: Monitors your stock of **Symbol of Kings** while resting.
+- **"Warn if Low"**: Optional early warnings for Seals—get notified before they expire.
+
+### Rogue
+- **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
+- **Critical Ammo**: A survival alert if your ammo/thrown count drops below a dangerous level.
+- **Low Ammo**: A resting reminder to restock before your next adventure.
+
 ### Shaman
 - **Missing Shield**: Alerts if Water Shield or Lightning Shield is missing.
 - **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
@@ -57,12 +69,18 @@ Personalize the alerts to match your UI:
   - **Fish Scales** (Water Shield)
 - **"Warn if Low"**: A special toggle for Shields and Weapon buffs—reminds you to re-apply them *before* they expire (configurable seconds threshold).
 
+### Warrior
+- **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
+- **Critical Ammo**: A "Red Alert" for when your ranged supplies are nearly empty.
+- **Low Ammo**: A convenience reminder to stock up while resting.
+
 ---
 
 ## Smart Features
 
 - **Dynamic Logic**: Reminders only appear if you have learned the required spells and are at a relevant level.
 - **Resting Awareness**: Supply and repair reminders stay hidden while you are adventuring, only appearing when you reach a City or Inn.
+- **Combat & Movement Safety**: Reminders are automatically suppressed while you are dead, on a taxi, or (for certain buffs) while mounted.
 - **Non-Overlapping UI**: Alerts stack vertically and resize themselves to ensure every message is readable without cluttering your screen.
 
 ---

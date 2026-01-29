@@ -212,6 +212,21 @@ function Prepped:RegisterReminderModule(module)
     table.insert(self.reminderModules, module)
 end
 
+function Prepped:GetAmmoCount()
+    local itemID = GetInventoryItemID("player", 18) -- Ranged Slot
+    if not itemID then return nil end
+    
+    local _, _, _, _, _, _, _, _, _, _, _, itemClassID, itemSubClassID = GetItemInfo(itemID)
+    
+    -- 4 is Weapon, 16 is Thrown
+    if itemClassID == 4 and itemSubClassID == 16 then
+        return GetInventoryItemCount("player", 18)
+    end
+    
+    -- Slot 0 is INVSLOT_AMMO
+    return GetInventoryItemCount("player", 0)
+end
+
 Prepped.displayLines = {}
 Prepped.activeCount = 0
 
@@ -292,6 +307,12 @@ end
 
 function Prepped:CheckReminders()
     self:ResetReminders()
+    
+    -- Don't show reminders if dead or on a taxi
+    if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then
+        return
+    end
+
     for _, module in ipairs(self.reminderModules) do
         if module.CheckReminders then
             module.CheckReminders()
@@ -302,7 +323,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.5.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.6.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -313,6 +334,7 @@ Prepped.AllRules = {
     { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 40, description = "Show a warning when your Water count drops below specific threshold if you are a mana user." },
     { id = "general_water_minlevel", label = "Water Min Level", group = "General", defaultThreshold = 10, description = "Minimum level required to show the Buy Water reminder." },
     { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 100, description = "Show a warning if your gear durability drops below the configured percentage while you are resting." },
+    { id = "hunter_no_ammo", label = "No Ammo Equipped", group = "Hunter", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot." },
     { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, description = "Show a warning when your ammo count drops below the configured threshold when resting." },
     { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, description = "Show a warning when your ammo count drops below the critical threshold at any time." },
     { id = "hunter_aspect", label = "Missing Aspect", group = "Hunter", description = "Reminds you to have an Aspect buff active." },
@@ -332,6 +354,19 @@ Prepped.AllRules = {
     { id = "shaman_fish_scales", label = "Buy Fish Scales", group = "Shaman", defaultThreshold = 10, description = "Show a warning when your Fish Scales count drops below the configured threshold." },
     { id = "shaman_shield_buff", label = "Missing Shield Buff", group = "Shaman", defaultThreshold = 60, hasLowWarningToggle = true, description = "Reminds you to buff yourself with a Shield buff." },
     { id = "shaman_weapon_buff", label = "Missing Weapon Buff", group = "Shaman", defaultThreshold = 60, hasLowWarningToggle = true, description = "Smart reminder for Shaman weapon imbues based on spec/dual-wielding." },
+
+    { id = "rogue_no_ammo", label = "No Ammo/Thrown Equipped", group = "Rogue", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
+    { id = "rogue_ammo_low", label = "Low Ammo/Thrown", group = "Rogue", defaultThreshold = 100, description = "Show a warning when your ammo/thrown count drops below the configured threshold when resting." },
+    { id = "rogue_ammo_critical", label = "Critical Ammo/Thrown", group = "Rogue", defaultThreshold = 20, description = "Show a warning when your ammo/thrown count drops below the critical threshold at any time." },
+
+    { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
+    { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, description = "Show a warning when your ammo/thrown count drops below the configured threshold when resting." },
+    { id = "warrior_ammo_critical", label = "Critical Ammo/Thrown", group = "Warrior", defaultThreshold = 20, description = "Show a warning when your ammo/thrown count drops below the critical threshold at any time." },
+    
+    { id = "paladin_seal", label = "Missing Seal in Combat", group = "Paladin", defaultThreshold = 5, hasLowWarningToggle = true, lowLabel = "seconds remaining.", description = "Reminds you to have a Seal active when you are in combat." },
+    { id = "paladin_aura", label = "Missing Aura", group = "Paladin", description = "Reminds you to have a Paladin Aura active at all times." },
+    { id = "paladin_blessing", label = "Missing Self-Blessing", group = "Paladin", description = "Reminds you to have a Blessing active on yourself when not resting." },
+    { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 20, description = "Show a warning when your Symbol of Kings count drops below the configured threshold when resting." },
 
     -- Add more here as you add rules
 }
@@ -922,6 +957,12 @@ container:RegisterEvent("UNIT_HEALTH")
 container:RegisterEvent("PET_UI_UPDATE")
 container:RegisterEvent("UNIT_STATS")
 container:RegisterEvent("PLAYER_ALIVE")
+container:RegisterEvent("PLAYER_DEAD")
+container:RegisterEvent("PLAYER_UNGHOST")
+container:RegisterEvent("PLAYER_CONTROL_LOST")
+container:RegisterEvent("PLAYER_CONTROL_GAINED")
+container:RegisterEvent("PLAYER_REGEN_DISABLED")
+container:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 container:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -933,6 +974,15 @@ container:SetScript("OnEvent", function(self, event, ...)
         Prepped:ShowWelcomeMessage()
     end
     Prepped:CheckReminders()
+end)
+
+local updateTimer = 0
+container:SetScript("OnUpdate", function(self, elapsed)
+    updateTimer = updateTimer + elapsed
+    if updateTimer >= 0.1 then
+        updateTimer = 0
+        Prepped:CheckReminders()
+    end
 end)
 
 _G.Prepped = Prepped
