@@ -53,7 +53,7 @@ Personalize the alerts to match your UI:
 - **Missing Blessing**: Reminds you to keep a Blessing active on yourself while adventuring.
 - **Missing Righteous Fury**: Alerts you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec.
 - **Reagent Tracking**: Monitors your stock of **Symbol of Kings** and **Symbol of Divinity** while resting.
-- **"Warn if Low"**: Optional early warnings for Seals—get notified before they expire.
+- **"Warn if Low"**: Optional early warnings for Seals and Righteous Fury—get notified before they expire.
 
 ### Rogue
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.

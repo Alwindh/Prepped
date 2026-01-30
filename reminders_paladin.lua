@@ -33,6 +33,7 @@ local paladinReminders = {
     {
         id = "paladin_righteous_fury",
         message = "Missing Righteous Fury!",
+        messageLow = "Righteous Fury expiring (%ss left)",
         mustNotRest = true,
     },
 }
@@ -204,6 +205,22 @@ local function PlayerHasRighteousFury()
     return false
 end
 
+-- Checks for Righteous Fury expiration
+local function GetRighteousFuryExpiration()
+    for i = 1, 40 do
+        local name, _, _, _, _, expirationTime = UnitAura("player", i, "HELPFUL")
+        if not name then break end
+        if name == "Righteous Fury" then
+            if expirationTime and expirationTime > 0 then
+                return expirationTime - GetTime()
+            else
+                return 999
+            end
+        end
+    end
+    return nil
+end
+
 -- Checks if a shield is equipped
 local function PlayerHasShield()
     local itemID = GetInventoryItemID("player", 17) -- Offhand
@@ -295,10 +312,20 @@ function PaladinReminders.CheckReminders()
 
                 -- Business logic: Righteous Fury
                 elseif config.id == "paladin_righteous_fury" then
-                    if not isMounted and PlayerKnowsRighteousFury() and not PlayerHasRighteousFury() then
+                    if not isMounted and PlayerKnowsRighteousFury() then
                         local inGroup = IsInGroup() or GetNumGroupMembers() > 0
                         if inGroup and PlayerHasShield() and PlayerIsProtectionSpec() then
-                            trigger = true
+                            local remaining = GetRighteousFuryExpiration()
+                            if not remaining then
+                                trigger = true
+                                displayMessage = config.message
+                            elseif Prepped:IsLowEnabled(config.id) then
+                                local threshold = Prepped:GetRuleThreshold(config.id, 60)
+                                if remaining <= threshold then
+                                    trigger = true
+                                    displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
+                                end
+                            end
                         end
                     end
 
