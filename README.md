@@ -51,7 +51,8 @@ Personalize the alerts to match your UI:
 - **Missing Seal**: Triggers in combat if you don't have a Seal active (with built-in logic to suppress the warning after using *Judgement*).
 - **Missing Aura**: Ensures you always have a Paladin Aura active.
 - **Missing Blessing**: Reminds you to keep a Blessing active on yourself while adventuring.
-- **Reagent Tracking**: Monitors your stock of **Symbol of Kings** while resting.
+- **Missing Righteous Fury**: Alerts you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec.
+- **Reagent Tracking**: Monitors your stock of **Symbol of Kings** and **Symbol of Divinity** while resting.
 - **"Warn if Low"**: Optional early warnings for Seals—get notified before they expire.
 
 ### Rogue

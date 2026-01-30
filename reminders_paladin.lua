@@ -21,9 +21,19 @@ local paladinReminders = {
     {
         id = "paladin_kings",
         message = "Low on Symbol of Kings (%s left)",
+        itemID = 21177,
+        mustRest = true,
+    },
+    {
+        id = "paladin_divinity",
+        message = "Low on Symbol of Divinity (%s left)",
         itemID = 17033,
         mustRest = true,
-        minLevel = 52,
+    },
+    {
+        id = "paladin_righteous_fury",
+        message = "Missing Righteous Fury!",
+        mustNotRest = true,
     },
 }
 
@@ -140,6 +150,34 @@ local function PlayerKnowsAnyBlessing()
     return false
 end
 
+-- Checks if the player has learned any Greater Blessing spell
+local function PlayerKnowsAnyGreaterBlessing()
+    for i = 1, GetNumSpellTabs() do
+        local _, _, offset, numSpells = GetSpellTabInfo(i)
+        for j = offset + 1, offset + numSpells do
+            local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
+            if spellName and spellName:find("Greater Blessing of ") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Checks if the player has learned the Divine Intervention spell
+local function PlayerKnowsDivineIntervention()
+    for i = 1, GetNumSpellTabs() do
+        local _, _, offset, numSpells = GetSpellTabInfo(i)
+        for j = offset + 1, offset + numSpells do
+            local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
+            if spellName == "Divine Intervention" then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- Checks if the player has learned the Judgement spell
 local function PlayerKnowsJudgement()
     for i = 1, GetNumSpellTabs() do
@@ -147,6 +185,53 @@ local function PlayerKnowsJudgement()
         for j = offset + 1, offset + numSpells do
             local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
             if spellName and (spellName:find("^Judgement") or spellName:find("^Judge")) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Checks if Righteous Fury is active
+local function PlayerHasRighteousFury()
+    for i = 1, 40 do
+        local name = UnitAura("player", i, "HELPFUL")
+        if not name then break end
+        if name == "Righteous Fury" then
+            return true
+        end
+    end
+    return false
+end
+
+-- Checks if a shield is equipped
+local function PlayerHasShield()
+    local itemID = GetInventoryItemID("player", 17) -- Offhand
+    if not itemID then return false end
+    local _, _, _, _, _, _, _, _, _, _, _, itemClassID, itemSubClassID = GetItemInfo(itemID)
+    -- In Classic/Retail: itemClassID 4 is Armor, itemSubClassID 6 is Shields
+    return itemClassID == 4 and itemSubClassID == 6
+end
+
+-- Checks if the player has more points in Protection than other trees
+local function PlayerIsProtectionSpec()
+    local numTabs = GetNumTalentTabs()
+    if numTabs < 2 then return false end
+    
+    local _, _, holyPoints = GetTalentTabInfo(1)
+    local _, _, protPoints = GetTalentTabInfo(2)
+    local _, _, retPoints = GetTalentTabInfo(3)
+    
+    return protPoints > holyPoints and protPoints > retPoints
+end
+
+-- Checks if player knows Righteous Fury
+local function PlayerKnowsRighteousFury()
+    for i = 1, GetNumSpellTabs() do
+        local _, _, offset, numSpells = GetSpellTabInfo(i)
+        for j = offset + 1, offset + numSpells do
+            local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
+            if spellName == "Righteous Fury" then
                 return true
             end
         end
@@ -208,14 +293,32 @@ function PaladinReminders.CheckReminders()
                         trigger = true
                     end
 
-                -- Business logic: Symbol of Kings (Reagents)
+                -- Business logic: Righteous Fury
+                elseif config.id == "paladin_righteous_fury" then
+                    if not isMounted and PlayerKnowsRighteousFury() and not PlayerHasRighteousFury() then
+                        local inGroup = IsInGroup() or GetNumGroupMembers() > 0
+                        if inGroup and PlayerHasShield() and PlayerIsProtectionSpec() then
+                            trigger = true
+                        end
+                    end
+
+                -- Business logic: Reagents
                 elseif config.itemID then
-                    local count = GetItemCount(config.itemID)
-                    local userThreshold = Prepped:GetRuleThreshold(config.id, 20)
-                    
-                    if count < userThreshold then
-                        trigger = true
-                        displayMessage = string.format(config.message, count)
+                    local learned = false
+                    if config.id == "paladin_kings" then
+                        learned = PlayerKnowsAnyGreaterBlessing()
+                    elseif config.id == "paladin_divinity" then
+                        learned = PlayerKnowsDivineIntervention()
+                    end
+
+                    if learned then
+                        local count = GetItemCount(config.itemID)
+                        local userThreshold = Prepped:GetRuleThreshold(config.id, 20)
+                        
+                        if count < userThreshold then
+                            trigger = true
+                            displayMessage = string.format(config.message, count)
+                        end
                     end
                 end
             end

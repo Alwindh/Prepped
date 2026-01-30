@@ -323,7 +323,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.6.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.6.1|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -366,7 +366,9 @@ Prepped.AllRules = {
     { id = "paladin_seal", label = "Missing Seal in Combat", group = "Paladin", defaultThreshold = 5, hasLowWarningToggle = true, lowLabel = "seconds remaining.", description = "Reminds you to have a Seal active when you are in combat." },
     { id = "paladin_aura", label = "Missing Aura", group = "Paladin", description = "Reminds you to have a Paladin Aura active at all times." },
     { id = "paladin_blessing", label = "Missing Self-Blessing", group = "Paladin", description = "Reminds you to have a Blessing active on yourself when not resting." },
-    { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 20, description = "Show a warning when your Symbol of Kings count drops below the configured threshold when resting." },
+    { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 50, description = "Show a warning when your Symbol of Kings count drops below the configured threshold when resting." },
+    { id = "paladin_divinity", label = "Low Symbol of Divinity", group = "Paladin", defaultThreshold = 5, description = "Show a warning when your Symbol of Divinity count drops below the configured threshold when resting." },
+    { id = "paladin_righteous_fury", label = "Missing Righteous Fury", group = "Paladin", description = "Reminds you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec." },
 
     -- Add more here as you add rules
 }
