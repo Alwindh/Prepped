@@ -16,6 +16,7 @@ local paladinReminders = {
     {
         id = "paladin_blessing",
         message = "No Blessing Active!",
+        messageLow = "Blessing expiring (%ss left)",
         mustNotRest = true,
     },
     {
@@ -96,16 +97,20 @@ local function PlayerHasAura()
     return false
 end
 
--- Checks if the player has an active Blessing buff
-local function PlayerHasBlessing()
+-- Checks for Blessing expiration time
+local function GetBlessingExpiration()
     for i = 1, 40 do
-        local name = UnitAura("player", i, "HELPFUL")
+        local name, _, _, _, _, expirationTime = UnitAura("player", i, "HELPFUL")
         if not name then break end
         if name:find("Blessing of ") then
-            return true
+            if expirationTime and expirationTime > 0 then
+                return expirationTime - GetTime()
+            else
+                return 999
+            end
         end
     end
-    return false
+    return nil
 end
 
 -- Checks if the player has learned any Seal spell
@@ -306,8 +311,18 @@ function PaladinReminders.CheckReminders()
 
                 -- Business logic: Paladin Blessing
                 elseif config.id == "paladin_blessing" then
-                    if not isMounted and PlayerKnowsAnyBlessing() and not PlayerHasBlessing() then
-                        trigger = true
+                    if not isMounted and PlayerKnowsAnyBlessing() then
+                        local remaining = GetBlessingExpiration()
+                        if not remaining then
+                            trigger = true
+                            displayMessage = config.message
+                        elseif Prepped:IsLowEnabled(config.id) then
+                            local threshold = Prepped:GetRuleThreshold(config.id, 30)
+                            if remaining <= threshold then
+                                trigger = true
+                                displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
+                            end
+                        end
                     end
 
                 -- Business logic: Righteous Fury

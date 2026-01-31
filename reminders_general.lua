@@ -59,6 +59,12 @@ function GeneralReminders.CheckReminders()
                  local minLevel = Prepped:GetRuleThreshold(config.minLevelConfig, 10)
                  if UnitLevel("player") < minLevel then trigger = false end
             end
+
+            -- Mage Exception for Water
+            if trigger and config.id == "general_water" then
+                local _, class = UnitClass("player")
+                if class == "MAGE" then trigger = false end
+            end
             
             if trigger and config.checkWater then
                 local count = GetWaterCount()

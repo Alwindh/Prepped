@@ -216,7 +216,19 @@ function HunterReminders.CheckReminders()
             
             -- Buff Logic
             if trigger and config.missingBuffs then
-                if PlayerHasBuffFromList(config.missingBuffs) then trigger = false end
+                -- Special Knowledge check for aspects
+                if config.id == "hunter_aspect" then
+                    local learnedAny = false
+                    for _, sID in ipairs(config.missingBuffs) do
+                        if IsPlayerSpell(sID) then
+                            learnedAny = true
+                            break
+                        end
+                    end
+                    if not learnedAny then trigger = false end
+                end
+
+                if trigger and PlayerHasBuffFromList(config.missingBuffs) then trigger = false end
             end
             
             -- Pet Logic
