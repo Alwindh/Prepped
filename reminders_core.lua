@@ -323,7 +323,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.6.3|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.6.4|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -362,6 +362,7 @@ Prepped.AllRules = {
     { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
     { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, description = "Show a warning when your ammo/thrown count drops below the configured threshold when resting." },
     { id = "warrior_ammo_critical", label = "Critical Ammo/Thrown", group = "Warrior", defaultThreshold = 20, description = "Show a warning when your ammo/thrown count drops below the critical threshold at any time." },
+    { id = "warrior_battle_shout", label = "Missing Battle Shout", group = "Warrior", defaultThreshold = 10, hasLowWarningToggle = true, lowLabel = "seconds remaining.", description = "Reminds you to have Battle Shout active when you are in combat." },
     
     { id = "paladin_seal", label = "Missing Seal in Combat", group = "Paladin", defaultThreshold = 5, hasLowWarningToggle = true, lowLabel = "seconds remaining.", description = "Reminds you to have a Seal active when you are in combat." },
     { id = "paladin_aura", label = "Missing Aura", group = "Paladin", description = "Reminds you to have a Paladin Aura active at all times." },

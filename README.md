@@ -71,6 +71,8 @@ Personalize the alerts to match your UI:
 - **"Warn if Low"**: A special toggle for Shields and Weapon buffs—reminds you to re-apply them *before* they expire (configurable seconds threshold).
 
 ### Warrior
+- **Missing Battle Shout**: Alerts you if you don't have Battle Shout active while in combat (only if you know *Battle Shout*).
+- **"Warn if Low"**: Optional early warning for Battle Shout—get notified before it expires (default: 10 seconds remaining).
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
 - **Critical Ammo**: A "Red Alert" for when your ranged supplies are nearly empty.
 - **Low Ammo**: A convenience reminder to stock up while resting.
