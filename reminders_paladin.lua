@@ -355,7 +355,7 @@ function PaladinReminders.CheckReminders()
 
                     if learned then
                         local count = GetItemCount(config.itemID)
-                        local userThreshold = Prepped:GetRuleThreshold(config.id, 20)
+                        local userThreshold = Prepped:GetRuleThreshold(config.id)
                         
                         if count < userThreshold then
                             trigger = true
