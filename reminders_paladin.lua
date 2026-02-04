@@ -238,11 +238,18 @@ end
 -- Checks if the player has more points in Protection than other trees
 local function PlayerIsProtectionSpec()
     local numTabs = GetNumTalentTabs()
-    if numTabs < 2 then return false end
+    if numTabs < 3 then return false end
     
-    local _, _, holyPoints = GetTalentTabInfo(1)
-    local _, _, protPoints = GetTalentTabInfo(2)
-    local _, _, retPoints = GetTalentTabInfo(3)
+    -- GetTalentTabInfo returns: id, name, description, icon, pointsSpent, ...
+    -- pointsSpent is the 5th return value
+    local _, _, _, _, holyPoints = GetTalentTabInfo(1)
+    local _, _, _, _, protPoints = GetTalentTabInfo(2)
+    local _, _, _, _, retPoints = GetTalentTabInfo(3)
+    
+    -- Handle nil values (e.g., if talent info isn't loaded yet)
+    holyPoints = holyPoints or 0
+    protPoints = protPoints or 0
+    retPoints = retPoints or 0
     
     return protPoints > holyPoints and protPoints > retPoints
 end
