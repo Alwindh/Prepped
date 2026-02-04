@@ -59,6 +59,10 @@ Personalize the alerts to match your UI:
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
 - **Critical Ammo**: A survival alert if your ammo/thrown count drops below a dangerous level.
 - **Low Ammo**: A resting reminder to restock before your next adventure.
+- **Missing Weapon Poison**: Alerts if either weapon is missing poison (only if you know *Poisons* and have poison in bags).
+- **Low Flash Powder**: Reminds you to stock up on Flash Powder while **resting** if you know *Vanish* (default: 10).
+- **Low Poison Stock**: Warns you while **resting** if your total poison count is low (default: 20, checks all poison types).
+- **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
 
 ### Shaman
 - **Missing Shield**: Alerts if Water Shield or Lightning Shield is missing.
