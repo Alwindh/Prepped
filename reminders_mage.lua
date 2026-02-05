@@ -32,16 +32,20 @@ local mageReminders = {
     {
         id = "mage_ai_buff",
         message = "Buff Missing: Arcane Intellect",
+        messageLow = "Arcane Intellect expiring (%ss left)",
         mustRest = false,
         requiredSpell = "Arcane Intellect",
         missingBuffs = {"Arcane Intellect", "Arcane Brilliance"},
+        buffNames = {"Arcane Intellect", "Arcane Brilliance"},
     },
         {
             id = "mage_armor_buff",
             message = "Buff Missing: Mage Armor",
+            messageLow = "Armor buff expiring (%ss left)",
             mustRest = false,
             requiredAnySpell = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
             missingBuffs = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
+            buffNames = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
         },
     {
         id = "mage_powder",
@@ -116,6 +120,23 @@ local function IsAnySpellLearned(spellList)
     return false
 end
 
+local function GetBuffExpiration(buffNames)
+    for i = 1, 40 do
+        local name, _, _, _, duration, expirationTime = UnitAura("player", i, "HELPFUL")
+        if not name then break end
+        for _, buffName in ipairs(buffNames) do
+            if name == buffName then
+                if expirationTime and expirationTime > 0 then
+                    return expirationTime - GetTime()
+                else
+                    return 999
+                end
+            end
+        end
+    end
+    return nil
+end
+
 function MageReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
     if playerClass ~= "MAGE" then return end
@@ -145,7 +166,20 @@ function MageReminders.CheckReminders()
 
             -- Missing Buffs Check
             if trigger and config.missingBuffs then
-                if HasAnyBuff(config.missingBuffs) then trigger = false end
+                if HasAnyBuff(config.missingBuffs) then
+                    -- Buff is present, but check for low warning
+                    if config.buffNames and Prepped:IsLowEnabled(config.id) then
+                        local remaining = GetBuffExpiration(config.buffNames)
+                        if remaining and remaining <= Prepped:GetRuleThreshold(config.id, 60) then
+                            trigger = true
+                            displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
+                        else
+                            trigger = false
+                        end
+                    else
+                        trigger = false
+                    end
+                end
             end
 
             -- Item Count Check

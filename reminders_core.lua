@@ -323,7 +323,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.6.7|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.6.8|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -346,8 +346,8 @@ Prepped.AllRules = {
     { id = "mage_powder", label = "Low Arcane Powder", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Arcane Powder count drops below the configured threshold when resting." },
     { id = "mage_rune_teleport", label = "Low Runes of Teleportation", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Runes of Teleportation count drops below the configured threshold when resting." },
     { id = "mage_rune_portals", label = "Low Runes of Portals", group = "Mage", defaultThreshold = 10, description = "Show a warning when your Runes of Portals count drops below the configured threshold when resting." },
-    { id = "mage_ai_buff", label = "Missing Arcane Intellect Buff", group = "Mage", description = "Reminds you to buff yourself with Arcane Intellect." },
-    { id = "mage_armor_buff", label = "Missing Armor Buff", group = "Mage", description = "Reminds you to buff yourself with an Armor buff." },
+    { id = "mage_ai_buff", label = "Missing Arcane Intellect Buff", group = "Mage", hasLowWarningToggle = true, defaultThreshold = 60, lowLabel = "seconds remaining.", description = "Reminds you to buff yourself with Arcane Intellect." },
+    { id = "mage_armor_buff", label = "Missing Armor Buff", group = "Mage", hasLowWarningToggle = true, defaultThreshold = 60, lowLabel = "seconds remaining.", description = "Reminds you to buff yourself with an Armor buff." },
     { id = "mage_mana_gem", label = "Missing Mana Gem", group = "Mage", description = "Reminds you to conjure a Mana Gem if you are not resting and don't have one." },
     { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 8, description = "Show a warning when your Ankhs count drops below the configured threshold." },
     { id = "shaman_fish_oil", label = "Buy Fish Oil", group = "Shaman", defaultThreshold = 10, description = "Show a warning when your Fish Oil count drops below the configured threshold." },
