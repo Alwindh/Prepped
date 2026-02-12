@@ -26,7 +26,7 @@ local hunterReminders = {
         message = "Buff missing: Aspect",
         mustNotRest = true,
         requireOneSpell = { 13163, 13165 },
-        missingBuffs = { 13163, 13165, 5118, 13161, 13155, 20043, 20190, 34074 }
+        missingBuffs = { 34074,5118,27044,13159,27045,13163,13161,13165,25296,14320,14318,14322,14319,20190,20043,14321 }
     },
     {
         id = "hunter_no_pet",
