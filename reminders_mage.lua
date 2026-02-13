@@ -96,6 +96,7 @@ local mageReminders = {
         id = "mage_mana_gem",
         message = "Missing item: Mana Gem",
         mustRest = false,
+        inCombatOnly = false,
         manaGemCheck = true,
     },
     
@@ -198,19 +199,25 @@ function MageReminders.CheckReminders()
             
             -- Mana Gem Check
             if trigger and config.manaGemCheck then
-                -- 1. Check if ANY conjure spell is learned
-                if not IsAnySpellLearned(MageConjureSpells) then
+                -- Don't show mana gem reminder when in combat
+                local inCombat = UnitAffectingCombat("player") or (InCombatLockdown and InCombatLockdown())
+                if inCombat then
                     trigger = false
                 else
-                    -- 2. Check if ANY mana gem is in bags
-                    local hasGem = false
-                    for _, gemID in ipairs(MageManaGems) do
-                        if GetItemCount(gemID) > 0 then
-                            hasGem = true
-                            break
+                    -- 1. Check if ANY conjure spell is learned
+                    if not IsAnySpellLearned(MageConjureSpells) then
+                        trigger = false
+                    else
+                        -- 2. Check if ANY mana gem is in bags
+                        local hasGem = false
+                        for _, gemID in ipairs(MageManaGems) do
+                            if GetItemCount(gemID) > 0 then
+                                hasGem = true
+                                break
+                            end
                         end
+                        if hasGem then trigger = false end
                     end
-                    if hasGem then trigger = false end
                 end
             end
 

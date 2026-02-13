@@ -25,6 +25,7 @@ local hunterReminders = {
         id = "hunter_aspect",
         message = "Buff missing: Aspect",
         mustNotRest = true,
+        isMountedOnly = true,
         requireOneSpell = { 13163, 13165 },
         missingBuffs = { 34074,5118,27044,13159,27045,13163,13161,13165,25296,14320,14318,14322,14319,20190,20043,14321 }
     },
@@ -226,6 +227,8 @@ function HunterReminders.CheckReminders()
                         end
                     end
                     if not learnedAny then trigger = false end
+                    -- Don't show aspect reminder when mounted
+                    if trigger and config.isMountedOnly and IsMounted() then trigger = false end
                 end
 
                 if trigger and PlayerHasBuffFromList(config.missingBuffs) then trigger = false end
