@@ -57,7 +57,7 @@ scanner:SetOwner(WorldFrame, "ANCHOR_NONE")
 -- EXPANDED Keywords for robust detection
 -- Added "bleu" for Darnassian Bleu, "stalk"/"whole" for mushrooms, etc.
 local DietKeywords = {
-    ["Meat"] = { "meat", "jerky", "steak", "chop", "rib", "wing", "leg", "haunch", "sausage", "bird", "poultry", "venison", "mutton", "beef", "pork", "flesh", "kidney", "loiterer", "spider", "wolf" },
+    ["Meat"] = { "shank", "meat", "jerky", "steak", "chop", "rib", "wing", "leg", "haunch", "sausage", "bird", "poultry", "venison", "mutton", "beef", "pork", "flesh", "kidney", "loiterer", "spider", "wolf" },
     ["Fish"] = { "fish", "mackerel", "snapper", "sagefish", "catfish", "deviate", "salmon", "squid", "eel", "clam", "mussel", "oyster", "trout", "cod", "yellowtail", "fin", "filet" },
     ["Cheese"] = { "cheese", "blue", "bleu", "curd", "wedge", "block", "cheddar", "brie", "gouda", "swiss", "dairy", "darnassian", "dalaran", "alterac" },
     ["Bread"] = { "bread", "roll", "bun", "biscuit", "croissant", "pastry", "muffin", "sourdough", "grain", "dough", "cake", "toast", "strudel", "flatbread", "ration" },
