@@ -323,7 +323,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.6.12|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.7.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -370,6 +370,8 @@ Prepped.AllRules = {
     { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 50, description = "Show a warning when your Symbol of Kings count drops below the configured threshold when resting." },
     { id = "paladin_divinity", label = "Low Symbol of Divinity", group = "Paladin", defaultThreshold = 5, description = "Show a warning when your Symbol of Divinity count drops below the configured threshold when resting." },
     { id = "paladin_righteous_fury", label = "Missing Righteous Fury", group = "Paladin", hasLowWarningToggle = true, defaultThreshold = 60, lowLabel = "seconds remaining.", description = "Reminds you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec." },
+
+    { id = "priest_fortitude", label = "Missing Power Word: Fortitude", group = "Priest", hasLowWarningToggle = true, defaultThreshold = 60, lowLabel = "seconds remaining.", description = "Reminds you to buff yourself with Power Word: Fortitude (or Prayer of Fortitude if learned). Warns when missing or expiring soon." },
 
     -- Add more here as you add rules
 }
@@ -442,7 +444,7 @@ local function CreateOptionsPanel()
              -- Anchor to ContentBox to ensure they stay attached visually
              tab:SetPoint("BOTTOMLEFT", contentBox, "TOPLEFT", 6, -2) 
         else
-             tab:SetPoint("TOPLEFT", panel.tabs[i-1], "TOPRIGHT", -5, 0)
+             tab:SetPoint("TOPLEFT", panel.tabs[i-1], "TOPRIGHT", -14, 0)
         end
         
         table.insert(panel.tabs, tab)
@@ -529,7 +531,9 @@ local function CreateOptionsPanel()
                 if rule.hasLowWarningToggle then
                      -- New Layout: Description inline with Main Checkbox
                      desc:SetPoint("LEFT", cb.Text, "RIGHT", 8, 0)
+                     desc:SetPoint("RIGHT", -10, 0)
                      desc:SetJustifyH("LEFT")
+                     desc:SetWordWrap(true)
                      -- Don't increase height yet, we stay on line 1
                 else
                      -- Standard Layout: Description below

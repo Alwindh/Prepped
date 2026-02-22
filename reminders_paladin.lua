@@ -254,6 +254,25 @@ local function PlayerIsProtectionSpec()
     return protPoints > holyPoints and protPoints > retPoints
 end
 
+-- Checks if the player has more points in Holy than other trees
+local function PlayerIsHolySpec()
+    local numTabs = GetNumTalentTabs()
+    if numTabs < 3 then return false end
+
+    -- GetTalentTabInfo returns: id, name, description, icon, pointsSpent, ...
+    -- pointsSpent is the 5th return value
+    local _, _, _, _, holyPoints = GetTalentTabInfo(1)
+    local _, _, _, _, protPoints = GetTalentTabInfo(2)
+    local _, _, _, _, retPoints = GetTalentTabInfo(3)
+
+    -- Handle nil values (e.g., if talent info isn't loaded yet)
+    holyPoints = holyPoints or 0
+    protPoints = protPoints or 0
+    retPoints = retPoints or 0
+
+    return holyPoints > protPoints and holyPoints > retPoints
+end
+
 -- Checks if player knows Righteous Fury
 local function PlayerKnowsRighteousFury()
     for i = 1, GetNumSpellTabs() do
@@ -292,7 +311,9 @@ function PaladinReminders.CheckReminders()
             if filterPassed then
                 -- Business logic: Paladin Seal
                 if config.id == "paladin_seal" then
-                    if (currentTime - lastJudgementTime) < 2.0 then
+                    if playerLevel >= 10 and PlayerIsHolySpec() then
+                        -- Skip seal reminders for Holy spec once talents are available
+                    elseif (currentTime - lastJudgementTime) < 2.0 then
                         -- Judgement suppression
                     elseif not PlayerKnowsAnySeal() or not PlayerKnowsJudgement() then
                         -- Don't warn if they can't seal/judge yet
