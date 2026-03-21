@@ -2,7 +2,7 @@
 ## Title: Prepped
 ## Notes: Simple reminders for chores (Reagents, buffs, repairs)
 ## Author: Excessive
-## Version: 1.7.0
+## Version: 1.7.1
 
 ## SavedVariables: PreppedSettings
 

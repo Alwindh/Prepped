@@ -187,6 +187,37 @@ StaticPopupDialogs["PREPPED_RESET_ALL_SETTINGS"] = {
 SLASH_PREPPED1 = "/prepped"
 SLASH_PREPPED2 = "/prepped"
 SlashCmdList["PREPPED"] = function(msg)
+    if msg == "debug" then
+        print("|cff00ff00Prepped Debug:|r")
+        print("  GetSpecialization exists: " .. tostring(GetSpecialization ~= nil))
+        if GetSpecialization then
+            local specIndex = GetSpecialization()
+            print("  GetSpecialization() = " .. tostring(specIndex))
+            if specIndex then
+                local id, name, description, icon, role, primaryStat = GetSpecializationInfo(specIndex)
+                print("  Spec name=" .. tostring(name) .. " primaryStat=" .. tostring(primaryStat))
+            end
+        end
+        print("  GetTalentTabInfo exists: " .. tostring(GetTalentTabInfo ~= nil))
+        if GetTalentTabInfo then
+            for i = 1, 3 do
+                local a, b, c, d, e, f = GetTalentTabInfo(i)
+                print("  Tab " .. i .. " raw: |" .. tostring(a) .. "|" .. tostring(b) .. "|" .. tostring(c) .. "|" .. tostring(d) .. "|" .. tostring(e) .. "|" .. tostring(f) .. "|")
+            end
+        end
+        print("  GetNumTalents/GetTalentInfo exists: " .. tostring(GetNumTalents ~= nil) .. " / " .. tostring(GetTalentInfo ~= nil))
+        if GetNumTalents and GetTalentInfo then
+            for i = 1, 3 do
+                local total = 0
+                for j = 1, GetNumTalents(i) do
+                    local _, _, _, _, currentRank = GetTalentInfo(i, j)
+                    total = total + (currentRank or 0)
+                end
+                print("  Tab " .. i .. " counted points: " .. total)
+            end
+        end
+        return
+    end
     -- 1. Try the Modern 2026 API using our saved category object
     if Prepped.settingsCategory and Settings and Settings.OpenToCategory then
         -- We pass the ID of the category we stored during CreateOptionsPanel
@@ -323,7 +354,7 @@ end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.7.0|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v1.7.1|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -970,6 +1001,7 @@ container:RegisterEvent("PLAYER_CONTROL_LOST")
 container:RegisterEvent("PLAYER_CONTROL_GAINED")
 container:RegisterEvent("PLAYER_REGEN_DISABLED")
 container:RegisterEvent("PLAYER_REGEN_ENABLED")
+container:RegisterEvent("PLAYER_TALENT_UPDATE")
 
 container:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then

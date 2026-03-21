@@ -51,24 +51,57 @@ end
 local function IsEnhancementOrLeveling()
     -- Check Primary Stat. Agility (2) implies Melee/Enhancement.
     -- Intellect (4) implies Caster/Healer.
-    
-    -- If GetSpecialization is not available (Classic Era), we assume true for Shaman (check all), 
-    -- as we cannot distinguish spec easily without inspecting talents.
-    if not GetSpecialization then return true end
 
-    local specIndex = GetSpecialization()
-    if specIndex then
-        local id, name, description, icon, role, primaryStat = GetSpecializationInfo(specIndex)
-        
-        -- Enhancement uses Agility (2)
-        -- Also check name just in case
-        if primaryStat == 2 then return true end
-        if name == "Enhancement" then return true end
-        
-        return false
+    -- Retail / Cata+: GetSpecialization returns a valid specIndex.
+    -- On Classic clients (TBC Anniversary etc.) the function may exist but return nil,
+    -- so only trust it when specIndex is non-nil.
+    if GetSpecialization then
+        local specIndex = GetSpecialization()
+        if specIndex then
+            local id, name, description, icon, role, primaryStat = GetSpecializationInfo(specIndex)
+
+            -- Enhancement uses Agility (2); also check name as a fallback
+            if primaryStat == 2 then return true end
+            if name == "Enhancement" then return true end
+
+            return false
+        end
+        -- specIndex is nil: could be a Classic client where GetSpecialization exists
+        -- but has no meaning, OR a Cata+ player who hasn't chosen a spec yet.
+        -- Fall through to talent-tree detection below.
     end
-    
-    -- Leveling / No Spec: Default to YES
+
+    -- Classic Era / TBC / WotLK: count actual talent ranks via GetTalentInfo.
+    -- GetTalentTabInfo can return empty strings for point totals on some clients,
+    -- so we sum up currentRank per talent ourselves instead.
+    --   Shaman tab 1 = Elemental, tab 2 = Enhancement, tab 3 = Restoration
+    if GetNumTalents and GetTalentInfo then
+        local function CountTabPoints(tabIndex)
+            local total = 0
+            for j = 1, GetNumTalents(tabIndex) do
+                local _, _, _, _, currentRank = GetTalentInfo(tabIndex, j)
+                total = total + (currentRank or 0)
+            end
+            return total
+        end
+
+        local elemPoints    = CountTabPoints(1)
+        local enhPoints     = CountTabPoints(2)
+        local restorePoints = CountTabPoints(3)
+
+        -- Suppress only when Elemental or Restoration strictly leads
+        if elemPoints > enhPoints and elemPoints > restorePoints then
+            return false -- Elemental
+        end
+        if restorePoints > enhPoints and restorePoints > elemPoints then
+            return false -- Restoration
+        end
+
+        -- Enhancement leads, all tabs zero (no talents yet), or a tie -> show reminder
+        return true
+    end
+
+    -- No spec data available at all: default to showing the reminder
     return true
 end
 
