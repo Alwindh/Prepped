@@ -1,8 +1,18 @@
 -- Hunter-specific reminders module
 local _, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local HunterReminders = {}
+
+local TAME_BEAST = API.SpellFamily("Tame Beast", { 1515 }, { class = "HUNTER" })
+local ASPECTS = API.SpellFamily("Aspects", {
+    13165, 14318, 14319, 14320, 14321, 14322, 25296, -- Aspect of the Hawk
+    13163,                                            -- Aspect of the Monkey
+    5118,                                             -- Aspect of the Cheetah
+    13159,                                            -- Aspect of the Pack
+    13161,                                            -- Aspect of the Beast
+    20043, 20190,                                     -- Aspect of the Wild
+}, { class = "HUNTER", aura = true })
 
 local hunterReminders = {
     {
@@ -29,8 +39,7 @@ local hunterReminders = {
         message = "Buff missing: Aspect",
         mustNotRest = true,
         isMountedOnly = true,
-        requireOneSpell = { 13163, 13165 },
-        missingBuffs = { 34074,5118,27044,13159,27045,13163,13161,13165,25296,14320,14318,14322,14319,20190,20043,14321 }
+        buffFamily = ASPECTS,
     },
     {
         id = "hunter_no_pet",
@@ -51,122 +60,24 @@ local hunterReminders = {
     },
 }
 
--- Getting ammo count moved to Prepped:GetAmmoCount() in core
+local IsAspect = API.Matcher(ASPECTS)
 
--- Hidden tooltip for scanning item food types
-local scanner = CreateFrame("GameTooltip", "PreppedScanner", nil, "GameTooltipTemplate")
-scanner:SetOwner(WorldFrame, "ANCHOR_NONE")
-
--- EXPANDED Keywords for robust detection
--- Added "bleu" for Darnassian Bleu, "stalk"/"whole" for mushrooms, etc.
-local DietKeywords = {
-    ["Meat"] = { "shank", "meat", "jerky", "steak", "chop", "rib", "wing", "leg", "haunch", "sausage", "bird", "poultry", "venison", "mutton", "beef", "pork", "flesh", "kidney", "loiterer", "spider", "wolf" },
-    ["Fish"] = { "fish", "mackerel", "snapper", "sagefish", "catfish", "deviate", "salmon", "squid", "eel", "clam", "mussel", "oyster", "trout", "cod", "yellowtail", "fin", "filet" },
-    ["Cheese"] = { "cheese", "blue", "bleu", "curd", "wedge", "block", "cheddar", "brie", "gouda", "swiss", "dairy", "darnassian", "dalaran", "alterac" },
-    ["Bread"] = { "bread", "roll", "bun", "biscuit", "croissant", "pastry", "muffin", "sourdough", "grain", "dough", "cake", "toast", "strudel", "flatbread", "ration" },
-    ["Fungus"] = { "fungus", "mushroom", "cap", "spore", "truffle", "conk", "stalk", "whole" },
-    ["Fruit"] = { "fruit", "apple", "banana", "grape", "melon", "berry", "pear", "pineapple", "orange", "lemon", "lime", "peach", "plum", "nectar", "starfruit", "moonberry", "sunfruit", "pomegranate" },
-}
-
-
--- Fallback for clients without C_PetInfo.CanPetEatItem (TBC): read the diet
--- from the item tooltip, then from keywords in the item name.
-local function ItemMatchesDiet(bag, slot, itemID, activeDiets)
-    local itemName, _, _, _, _, _, _, _, _, _, _, itemClassID, itemSubClassID = Compat.GetItemInfo(itemID)
-
-    -- Cache priming: if info isn't here yet, request it and move on
-    if not itemClassID then
-        return false
-    end
-
-    local lowerName = itemName:lower()
-
-    -- 1. THE SKULL FILTER:
-    -- Consumable (0) + Generic (0) is almost always a non-food "Use" item.
-    if itemClassID == 0 and itemSubClassID == 0 then
-        return false
-    end
-
-    -- 2. TOOLTIP SCAN (The primary source)
-    scanner:SetOwner(WorldFrame, "ANCHOR_NONE")
-    scanner:ClearLines()
-    scanner:SetBagItem(bag, slot)
-
-    for i = 2, 6 do
-        local line = _G["PreppedScannerTextLeft"..i]
-        local text = line and line:GetText()
-        if text and text ~= "" then
-            local lowerText = text:lower()
-            -- Ignore action/level lines
-            if not (lowerText:find("use:") or lowerText:find("requires") or lowerText:find("level")) then
-                for diet, _ in pairs(activeDiets) do
-                    if lowerText:find("%f[%a]"..diet:lower().."%f[%A]") then
-                        return true
-                    end
-                end
-            end
-        end
-    end
-
-    -- 3. KEYWORD FALLBACK (The Mackerel Fix)
-    -- If tooltip failed, check if the Name contains any diet keywords.
-    -- We only do this for Trade Goods (7) and Food (0,5).
-    if itemClassID == 7 or (itemClassID == 0 and itemSubClassID == 5) then
-        for diet, _ in pairs(activeDiets) do
-            local keywords = DietKeywords[diet]
-            if keywords then
-                for _, kw in ipairs(keywords) do
-                    if lowerName:find(kw) then
-                        return true
-                    end
-                end
-            end
-        end
-    end
-
-    return false
-end
-
+-- Counts the food in your bags that your current pet will eat.
 local function GetPetFoodCount()
     if not UnitExists("pet") then return nil end
-
-    local foodTypes = Compat.GetPetFoodTypes()
-    if #foodTypes == 0 then return nil end
-
-    local activeDiets = {}
-    for _, diet in ipairs(foodTypes) do
-        activeDiets[diet] = true
-    end
+    local foodTypes = C_PetInfo.GetPetFoodTypes()
+    if not foodTypes or #foodTypes == 0 then return nil end
 
     local count = 0
-    for bag = 0, 4 do
-        local numSlots = C_Container.GetContainerNumSlots(bag)
-        for slot = 1, numSlots do
+    for bag = 0, API.NumBags() do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-
-            if info and info.itemID then
-                -- Forever can answer directly; TBC needs the tooltip/keyword heuristics.
-                local canEat = Compat.CanPetEatItem(info.itemID)
-                if canEat == nil then
-                    canEat = ItemMatchesDiet(bag, slot, info.itemID, activeDiets)
-                end
-                if canEat then
-                    count = count + (info.stackCount or 1)
-                end
+            if info and info.itemID and C_PetInfo.CanPetEatItem(info.itemID) then
+                count = count + (info.stackCount or 1)
             end
         end
     end
     return count
-end
-
-local buffMatchers = {}
-local function GetBuffMatcher(config)
-    local matcher = buffMatchers[config.id]
-    if not matcher then
-        matcher = Compat.SpellIDOrNameIn(config.missingBuffs)
-        buffMatchers[config.id] = matcher
-    end
-    return matcher
 end
 
 function HunterReminders.CheckReminders()
@@ -187,25 +98,25 @@ function HunterReminders.CheckReminders()
             if config.id == "hunter_ammo_low" and criticalTriggered then
                 trigger = false
             end
-            
+
             -- Ammo Logic
             if trigger and config.ammoCheck then
                 -- Suppress Low/Crit if count is 0 (handled by hunter_no_ammo) or if no weapon (nil)
-                if not ammoCount or ammoCount == 0 then 
-                    trigger = false 
+                if not ammoCount or ammoCount == 0 then
+                    trigger = false
                 else
                     local userThreshold = 0
                     if Prepped and Prepped.GetRuleThreshold then
                         userThreshold = Prepped:GetRuleThreshold(config.id)
                     end
-                    
+
                     local threshold = userThreshold
                     if isResting then
                         threshold = math.max(userThreshold, config.minCountResting or 0)
                     end
-                    
-                    if ammoCount >= threshold then 
-                        trigger = false 
+
+                    if ammoCount >= threshold then
+                        trigger = false
                     else
                         -- If this is the critical warning and it triggered, mark it
                         if config.id == "hunter_ammo_critical" then
@@ -225,32 +136,21 @@ function HunterReminders.CheckReminders()
                     criticalTriggered = true
                 end
             end
-            
-            -- Buff Logic
-            if trigger and config.missingBuffs then
-                -- Special Knowledge check for aspects
-                if config.id == "hunter_aspect" then
-                    local learnedAny = false
-                    for _, sID in ipairs(config.missingBuffs) do
-                        if Compat.KnowsSpellID(sID) then
-                            learnedAny = true
-                            break
-                        end
-                    end
-                    if not learnedAny then trigger = false end
-                    -- Don't show aspect reminder when mounted
-                    if trigger and config.isMountedOnly and IsMounted() then trigger = false end
-                end
 
+            -- Aspect Logic
+            if trigger and config.buffFamily then
+                if not API.KnowsFamily(config.buffFamily) then trigger = false end
+                -- Don't show aspect reminder when mounted
+                if trigger and config.isMountedOnly and IsMounted() then trigger = false end
                 -- "present" or "unknown" (buff data hidden in combat): no warning
-                if trigger and Compat.FindPlayerBuff(GetBuffMatcher(config)) ~= "missing" then trigger = false end
+                if trigger and API.FindPlayerBuff(IsAspect) ~= "missing" then trigger = false end
             end
 
             -- Pet Logic
             if trigger and config.petCheck then
                 if IsMounted() then
                     trigger = false
-                elseif not Compat.KnowsSpellID(1515) then -- Tame Beast
+                elseif not API.KnowsFamily(TAME_BEAST) then
                     trigger = false
                 elseif UnitExists("pet") and not UnitIsDead("pet") then
                     trigger = false
@@ -260,7 +160,7 @@ function HunterReminders.CheckReminders()
             -- Happiness Logic
             if trigger and config.petHappinessCheck then
                 if UnitExists("pet") then
-                    local happiness = Compat.GetPetHappiness()
+                    local happiness = C_PetInfo.GetPetHappiness()
                     -- happiness: 1 = unhappy, 2 = content, 3 = happy (nil = not available)
                     if happiness == nil or happiness == 3 then
                         trigger = false
@@ -269,25 +169,25 @@ function HunterReminders.CheckReminders()
                     trigger = false
                 end
             end
-            
+
             -- Pet Food Logic
             if trigger and config.petFoodCheck then
                 local count = GetPetFoodCount()
-                if count == nil then 
-                    trigger = false 
+                if count == nil then
+                    trigger = false
                 else
                     local threshold = 20
                     if Prepped and Prepped.GetRuleThreshold then
                         threshold = Prepped:GetRuleThreshold(config.id)
                     end
-                    if count >= threshold then 
-                        trigger = false 
+                    if count >= threshold then
+                        trigger = false
                     else
                         displayMessage = string.format(config.message, count or 0)
                     end
                 end
             end
-            
+
             if trigger then
                 local line = Prepped:GetNextLine()
                 if line then

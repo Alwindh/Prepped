@@ -1,8 +1,13 @@
 -- Rogue-specific reminders module
 local _, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local RogueReminders = {}
+
+local VANISH = API.SpellFamily("Vanish", { 1856, 1857 }, { class = "ROGUE" })
+-- Poisons is a secondary skill in Forever (skill line 40), not a spellbook spell.
+local POISONS = API.SpellFamily("Poisons", { 2842 }, { class = "ROGUE" })
+local POISONS_SKILL_LINE = 40
 
 local rogueReminders = {
     {
@@ -48,8 +53,8 @@ local poisonItemIDs = {
     6947, 6949, 6950, 8926, 8927, 8928,
     -- Deadly Poison (Ranks 1-5)
     2892, 2893, 8984, 8985, 20844,
-    -- Crippling Poison
-    3775,
+    -- Crippling Poison (Ranks 1-2)
+    3775, 3776,
     -- Mind-numbing Poison (Ranks 1-3)
     5237, 6951, 9186,
     -- Wound Poison (Ranks 1-4)
@@ -58,19 +63,19 @@ local poisonItemIDs = {
 
 -- Checks if the player has learned Vanish
 local function PlayerKnowsVanish()
-    return Compat.KnowsSpellNamed("Vanish")
+    return API.KnowsFamily(VANISH)
 end
 
--- Checks if the player has learned Poisons (the base poison-making skill)
+-- Checks if the player has learned Poisons (the poison-making skill)
 local function PlayerKnowsPoisons()
-    return Compat.KnowsSpellNamed("Poisons")
+    return API.GetSkillRank(POISONS_SKILL_LINE) > 0 or API.KnowsFamily(POISONS)
 end
 
 -- Counts total poison items in bags
 local function GetTotalPoisonCount()
     local total = 0
     for _, itemID in ipairs(poisonItemIDs) do
-        total = total + Compat.GetItemCount(itemID)
+        total = total + C_Item.GetItemCount(itemID)
     end
     return total
 end
@@ -85,15 +90,16 @@ local function IsDualWielding()
     local offHandID = GetInventoryItemID("player", 17)
     if not offHandID then return false end
     
-    local _, _, _, _, _, classID = Compat.GetItemInfoInstant(offHandID)
+    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(offHandID)
 
     if classID == 2 then return true end -- 2 is Enum.ItemClass.Weapon
     return false
 end
 
--- Gets weapon poison expiration times (returns mhRemaining, ohRemaining in seconds, or nil if no poison)
+-- Gets weapon poison expiration times (returns mhRemaining, ohRemaining in seconds, or nil if no poison).
+-- Only poisons count, not sharpening stones (which Forever lets you use on top of a poison).
 local function GetWeaponPoisonInfo()
-    local hasMH, mhExp, hasOH, ohExp = Compat.GetWeaponEnchants()
+    local hasMH, mhExp, hasOH, ohExp = API.GetWeaponImbues()
     -- mhExp/ohExp are in milliseconds
     local mhRemaining = nil
     local ohRemaining = nil
@@ -161,8 +167,9 @@ function RogueReminders.CheckReminders()
 
                 -- Flash Powder Check (resting, knows Vanish)
                 elseif config.id == "rogue_flash_powder" then
-                    if PlayerKnowsVanish() then
-                        local flashCount = Compat.GetItemCount(FLASH_POWDER_ID)
+                    -- Not needed with the Legacy perk "Reagent Economy"
+                    if PlayerKnowsVanish() and not API.HasReagentEconomy() then
+                        local flashCount = C_Item.GetItemCount(FLASH_POWDER_ID)
                         local threshold = Prepped:GetRuleThreshold(config.id, 10)
                         if flashCount < threshold then
                             trigger = true

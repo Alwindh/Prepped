@@ -1,8 +1,10 @@
 -- Warrior-specific reminders module
 local _, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local WarriorReminders = {}
+
+local BATTLE_SHOUT = API.SpellFamily("Battle Shout", { 6673, 5242, 6192, 11549, 11550, 11551, 25289 }, { class = "WARRIOR", aura = true })
 
 local warriorReminders = {
     {
@@ -31,10 +33,10 @@ local warriorReminders = {
 
 -- Checks if the player has learned Battle Shout
 local function PlayerKnowsBattleShout()
-    return Compat.KnowsSpellNamed("Battle Shout")
+    return API.KnowsFamily(BATTLE_SHOUT)
 end
 
-local IsBattleShout = Compat.NameIn({ "Battle Shout" })
+local IsBattleShout = API.Matcher(BATTLE_SHOUT)
 
 function WarriorReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
@@ -67,7 +69,7 @@ function WarriorReminders.CheckReminders()
                 if config.id == "warrior_battle_shout" then
                     if not isMounted and PlayerKnowsBattleShout() then
                         -- In combat, Forever may hide buff data ("unknown"): don't warn then.
-                        local state, remaining = Compat.FindPlayerBuff(IsBattleShout)
+                        local state, remaining = API.FindPlayerBuff(IsBattleShout)
                         if state == "missing" then
                             trigger = true
                             displayMessage = config.message
