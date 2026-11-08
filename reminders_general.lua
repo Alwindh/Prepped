@@ -29,10 +29,18 @@ local function GetWaterCount()
     return count
 end
 
+-- Mana users, including druids in a form that uses rage or energy.
+local function UsesMana()
+    local maxMana = UnitPowerMax("player", 0) -- 0 = Mana
+    if maxMana == nil or API.IsSecret(maxMana) then
+        return UnitPowerType("player") == 0
+    end
+    return maxMana > 0
+end
+
 function GeneralReminders.CheckReminders()
     local isResting = IsResting()
-    local powerType = UnitPowerType("player") -- 0 = Mana
-    
+
     for _, config in ipairs(generalRules) do
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
@@ -41,7 +49,7 @@ function GeneralReminders.CheckReminders()
             if config.mustRest and not isResting then trigger = false end
             
             -- Mana Check
-            if config.onlyMana and powerType ~= 0 then trigger = false end
+            if config.onlyMana and not UsesMana() then trigger = false end
 
             -- Min Level Check (if configured)
             if trigger and config.minLevelConfig then

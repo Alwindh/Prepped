@@ -8,10 +8,20 @@ local PriestReminders = {}
 
 local FORTITUDE = API.SpellFamily("Power Word: Fortitude", { 1243, 1244, 1245, 2791, 10937, 10938 }, { class = "PRIEST", aura = true })
 local PRAYER_OF_FORTITUDE = API.SpellFamily("Prayer of Fortitude", { 21562, 21564 }, { class = "PRIEST", aura = true })
+local INNER_FIRE = API.SpellFamily("Inner Fire", { 588, 7128, 602, 1006, 10951, 10952 }, { class = "PRIEST", aura = true })
+local PRAYER_OF_SPIRIT = API.SpellFamily("Prayer of Spirit", { 27681 }, { class = "PRIEST" })
+local PRAYER_OF_SHADOW_PROTECTION = API.SpellFamily("Prayer of Shadow Protection", { 27683 }, { class = "PRIEST" })
 
 local IsFortitudeBuff = API.Matcher(FORTITUDE, PRAYER_OF_FORTITUDE)
+local IsInnerFire = API.Matcher(INNER_FIRE)
 
--- Reminder configuration
+-- Prayer of Fortitude rank 1 uses Holy Candles; rank 2, Prayer of Spirit and
+-- Prayer of Shadow Protection use Sacred Candles.
+local CANDLES = {
+    { spells = { 21564, 27681, 27683 }, item = 17029, name = "Sacred Candles" },
+    { spells = { 21562 }, item = 17028, name = "Holy Candles" },
+}
+
 local priestReminders = {
     {
         id = "priest_fortitude",
@@ -19,80 +29,48 @@ local priestReminders = {
         messageLow = "Fortitude expiring (%ss left)",
         mustNotRest = true,
     },
+    {
+        id = "priest_inner_fire",
+        message = "Missing Inner Fire!",
+        messageLow = "Inner Fire expiring (%ss left)",
+        mustNotRest = true,
+    },
+    { id = "priest_candles", mustRest = true },
 }
 
--- Main reminder check function
-function PriestReminders.CheckReminders()
-    local _, playerClass = UnitClass("player")
-    if playerClass ~= "PRIEST" then
-        return
-    end
+local checks = {}
 
-    -- Get state variables
-    local isResting = IsResting()
-    local inCombat = UnitAffectingCombat("player") or (InCombatLockdown and InCombatLockdown())
-    local isMounted = IsMounted()
-
-    -- Process each reminder
-    for _, config in ipairs(priestReminders) do
-        if Prepped:IsRuleEnabled(config.id) then
-            -- Apply filters
-            local filterPassed = true
-            if config.mustRest and not isResting then
-                filterPassed = false
-            end
-            if config.mustNotRest and isResting then
-                filterPassed = false
-            end
-            if config.inCombatOnly and not inCombat then
-                filterPassed = false
-            end
-
-            if filterPassed then
-                local trigger = false
-                local displayMessage = config.message
-
-                -- Check for Power Word: Fortitude
-                if config.id == "priest_fortitude" then
-                    -- Skip if mounted
-                    if not isMounted then
-                        -- Check if player knows Fortitude (Prayer or regular)
-                        local knowsFortitude = API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(FORTITUDE)
-
-                        if knowsFortitude then
-                            local state, remaining = API.FindPlayerBuff(IsFortitudeBuff)
-
-                            if state == "missing" then
-                                -- Buff is missing
-                                trigger = true
-                                displayMessage = config.message
-                            elseif state == "present" and remaining and Prepped:IsLowEnabled(config.id) then
-                                -- Check if buff is expiring soon
-                                local threshold = Prepped:GetRuleThreshold(config.id, 60)
-                                if remaining <= threshold then
-                                    trigger = true
-                                    displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
-                                end
-                            end
-                            -- "unknown": buff data hidden by combat restrictions, don't warn
-                        end
-                    end
-                end
-
-                -- Display the reminder if triggered
-                if trigger then
-                    local line = Prepped:GetNextLine()
-                    if line then
-                        line.text:SetText(displayMessage)
-                        line:Show()
-                    end
-                end
-            end
-        end
-    end
+function checks.priest_fortitude(config)
+    if IsMounted() then return nil end
+    if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(FORTITUDE)) then return nil end
+    return Prepped:CheckTimedBuff(config.id, IsFortitudeBuff, config.message, config.messageLow)
 end
 
--- Register this module with the core system
+function checks.priest_inner_fire(config)
+    if IsMounted() or not API.KnowsFamily(INNER_FIRE) then return nil end
+    return Prepped:CheckTimedBuff(config.id, IsInnerFire, config.message, config.messageLow)
+end
+
+-- Vendor reagent: not needed with the Legacy perk "Reagent Economy"
+function checks.priest_candles(config)
+    if API.HasReagentEconomy() then return nil end
+    if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(PRAYER_OF_SPIRIT)
+        or API.KnowsFamily(PRAYER_OF_SHADOW_PROTECTION)) then
+        return nil
+    end
+    local count, name = API.CountReagentForKnownSpell(CANDLES)
+    if count < Prepped:GetRuleThreshold(config.id) then
+        return string.format("Low on %s (%d left)", name or "candles", count)
+    end
+    return nil
+end
+
+function PriestReminders.CheckReminders()
+    local _, playerClass = UnitClass("player")
+    if playerClass ~= "PRIEST" then return end
+    Prepped:RunReminders(priestReminders, checks)
+end
+
 if Prepped then
     Prepped:RegisterReminderModule(PriestReminders)
 end

@@ -10,7 +10,7 @@ Prepped's options live in the game's own settings: **Options → AddOns → Prep
 
 - **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water and repair reminders, and **Reset All Settings**.
 - **Appearance**: font size, minimum bar width, text color, background color and background opacity.
-- **One page per class** (Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warrior): every reminder can be switched on or off. Stock reminders have a slider for the amount to warn at; buff reminders have an extra **Warn when expiring** option with a seconds slider.
+- **One page per class** (Druid, Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warlock, Warrior): every reminder can be switched on or off. Stock reminders have a slider for the amount to warn at; buff reminders have an extra **Warn when expiring** option with a seconds slider.
 
 Settings are shared by all characters (**Account-wide**) unless you switch that off; then each character gets its own settings.
 
@@ -20,7 +20,14 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 
 ### Universal (All Classes)
 - **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
-- **Water Reminder**: Reminds mana users to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
+- **Water Reminder**: Reminds mana users (also druids in Bear or Cat Form) to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
+
+### Druid
+- **Missing Mark of the Wild**: Alerts you when neither Mark of the Wild nor Gift of the Wild is on you (not while resting, mounted or in Travel/Aquatic/Flight Form).
+- **Reagent Tracking**: Warnings while **resting** for the reagent of your highest rank:
+  - **Rebirth seeds** (Maple, Stranglethorn, Ashwood, Hornbeam or Ironwood Seeds)
+  - **Gift of the Wild** (Wild Berries or Wild Thornroot)
+- **"Warn if Low"**: Optional early warning before Mark of the Wild runs out.
 
 ### Hunter
 - **Critical Ammo**: A "Red Alert" that shows anytime your ammo drops below a critical point (e.g., 200).
@@ -47,12 +54,19 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Reagent Tracking**: Monitors your stock of **Symbol of Kings** and **Symbol of Divinity** while resting.
 - **"Warn if Low"**: Optional early warnings for Seals and Righteous Fury—get notified before they expire.
 
+### Priest
+- **Missing Power Word: Fortitude**: Alerts you when Fortitude (or Prayer of Fortitude) is missing while adventuring.
+- **Missing Inner Fire**: Alerts you when Inner Fire is missing while adventuring.
+- **Low Candles**: Reminds you while **resting** to restock the candles your Prayer spells use: **Sacred Candles** once you know Prayer of Fortitude rank 2, Prayer of Spirit or Prayer of Shadow Protection, **Holy Candles** before that.
+- **"Warn if Low"**: Optional early warnings for Fortitude and Inner Fire.
+
 ### Rogue
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
 - **Critical Ammo**: A survival alert if your ammo/thrown count drops below a dangerous level.
 - **Low Ammo**: A resting reminder to restock before your next adventure.
 - **Missing Weapon Poison**: Alerts if either weapon is missing poison (only if you have the *Poisons* skill and poison in bags). A sharpening stone on the weapon doesn't count as a poison.
 - **Low Flash Powder**: Reminds you to stock up on Flash Powder while **resting** if you know *Vanish* (default: 10).
+- **Low Blinding Powder**: Reminds you to make or buy Blinding Powder while **resting** if you know *Blind* (default: 5).
 - **Low Poison Stock**: Warns you while **resting** if your total poison count is low (default: 20, checks all poison types).
 - **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
 
@@ -65,6 +79,14 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
   - **Fish Oil** (Water Walking)
   - **Fish Scales** (Water Breathing)
 - **"Warn if Low"**: A special toggle for Shields and Weapon buffs—reminds you to re-apply them *before* they expire (configurable seconds threshold).
+
+### Warlock
+- **Missing Demon Armor**: Alerts you when Demon Armor (or Demon Skin before you learn it) is missing.
+- **Missing Demon**: Warns you when no demon is summoned (not while a *Demonic Sacrifice* buff is on you).
+- **Missing Weapon Stone**: In Forever, Firestone and Spellstone are weapon imbues. Once you can create one, Prepped reminds you to keep one on your main hand (a wizard oil on the same weapon doesn't count).
+- **Missing Healthstone / Soulstone**: Reminds you to create them when you have a Soul Shard (out of combat, not while resting). No Soulstone reminder while you are soulstoned yourself.
+- **Low Soul Shards**: Warns you out of combat while adventuring when you have fewer shards than your setting (default: 5), so you remember to *Drain Soul*.
+- **"Warn if Low"**: Optional early warnings for Demon Armor and your weapon stone.
 
 ### Warrior
 - **Missing Battle Shout**: Alerts you if you don't have Battle Shout active while in combat (only if you know *Battle Shout*).
@@ -87,10 +109,10 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 ## WoW Forever Notes
 
 - **Buffs during combat**: Forever can hide buff information from addons during combat, boss encounters and PvP matches. When Prepped can't see your buffs it stays quiet instead of guessing, so in-combat reminders (Seal, Battle Shout, and other buffs that drop mid-fight) only show for buffs Blizzard keeps visible. Out of combat everything works as usual. For a guaranteed in-combat alert, add the buff to Blizzard's **Cooldown Manager** and give it an "On Aura Removed" alert.
-- **Reagent Economy perk**: If you have this Legacy perk, Prepped detects it and hides the reminders for vendor reagents (Arcane Powder, Runes, Ankhs, Symbols, Flash Powder, …).
+- **Reagent Economy perk**: If you have this Legacy perk, Prepped detects it and hides the reminders for vendor reagents (Arcane Powder, Runes, Ankhs, Symbols, Flash Powder, candles, Rebirth seeds, Wild Berries/Thornroot, …). Soul Shards and Blinding Powder aren't sold by vendors, so those reminders stay.
 - **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English).
 - **Spec detection** (Protection/Holy Paladin, Enhancement Shaman) uses the points spent in each talent tree.
-- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, which of your buffs Blizzard hides in combat, and any spell IDs your client doesn't know.
+- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, which of your buffs Blizzard hides in combat, your druid form, and any spell IDs your client doesn't know.
 
 ---
 

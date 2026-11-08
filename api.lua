@@ -107,7 +107,7 @@ end
 -- Spellbook (cached; rebuilt on SPELLS_CHANGED and every few seconds)
 ------------------------------------------------------------------------
 local SPELL_CACHE_TTL = 10
-local spellCache, spellCacheTime, spellCacheGeneration = nil, 0, 0
+local spellCache, spellIDSet, spellCacheTime, spellCacheGeneration = nil, nil, 0, 0
 
 -- Returns { [spellName] = { spellID, ... } } for every learned player spell.
 local function GetSpellCache()
@@ -116,7 +116,7 @@ local function GetSpellCache()
         return spellCache
     end
 
-    local cache = {}
+    local cache, idSet = {}, {}
     local bank = Enum.SpellBookSpellBank.Player
     local learned = Enum.SpellBookItemType.Spell -- FutureSpell = listed but not learned yet
     for lineIndex = 1, C_SpellBook.GetNumSpellBookSkillLines() do
@@ -130,13 +130,15 @@ local function GetSpellCache()
                         ids = {}
                         cache[info.name] = ids
                     end
-                    ids[#ids + 1] = info.spellID or info.actionID
+                    local id = info.spellID or info.actionID
+                    ids[#ids + 1] = id
+                    if id then idSet[id] = true end
                 end
             end
         end
     end
 
-    spellCache, spellCacheTime = cache, now
+    spellCache, spellIDSet, spellCacheTime = cache, idSet, now
     spellCacheGeneration = spellCacheGeneration + 1
     if next(cache) == nil then
         -- Spellbook not loaded yet (early login): retry soon instead of caching "nothing known".
@@ -172,6 +174,36 @@ function API.KnowsFamily(family)
 
     family.known, family.knownGeneration = known, spellCacheGeneration
     return known
+end
+
+-- True if this exact spell ID (e.g. one rank of a spell) is learned.
+function API.KnowsSpell(spellID)
+    GetSpellCache()
+    return spellIDSet[spellID] == true or C_SpellBook.IsSpellKnown(spellID)
+end
+
+-- For spells whose reagent depends on the rank you know.
+--   options: { { spells = { spellID, ... }, item = itemID, name = "Reagent" }, ... }, best first
+-- Returns the first option with a learned spell, or nil.
+function API.PickByKnownSpell(options)
+    for _, option in ipairs(options) do
+        for _, spellID in ipairs(option.spells) do
+            if API.KnowsSpell(spellID) then return option end
+        end
+    end
+    return nil
+end
+
+-- Count and name of the reagent for the best learned option. If the spell is
+-- learned under an ID that isn't listed, every listed reagent counts (name nil).
+function API.CountReagentForKnownSpell(options)
+    local option = API.PickByKnownSpell(options)
+    if option then
+        return C_Item.GetItemCount(option.item), option.name
+    end
+    local items = {}
+    for i, entry in ipairs(options) do items[i] = entry.item end
+    return API.CountItems(items), nil
 end
 
 -- predicate(spellName, spellID) -> bool. Returns the matching learned spell IDs.
@@ -295,6 +327,15 @@ end
 ------------------------------------------------------------------------
 -- Skills, reagents, bags, consumables
 ------------------------------------------------------------------------
+-- Total count of the given items in your bags.
+function API.CountItems(itemIDs)
+    local total = 0
+    for _, itemID in ipairs(itemIDs) do
+        total = total + C_Item.GetItemCount(itemID)
+    end
+    return total
+end
+
 -- Rank of a skill line (e.g. 40 = Poisons), 0 when not learned.
 function API.GetSkillRank(skillLineID)
     local ok, info = pcall(C_SkillInfo.GetSkillLineInfoByID, skillLineID)
