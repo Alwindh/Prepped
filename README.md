@@ -123,4 +123,16 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 3. Ensure the folder is named exactly `Prepped`.
 4. (Optional) Install via **CurseForge** or **WowUP** for automatic updates.
 
+---
+
+## Development
+
+`tests/` runs Prepped against a mocked WoW Forever client: reminder scenarios for every class on an English and a German client, buff data hidden during combat, `/prepped debug` and the options. The tests run automatically on every pull request. To run them yourself you need Lua 5.1 (the game's Lua version):
+
+```bash
+lua5.1 tests/run.lua
+```
+
+The `tests/` folder isn't included in the release zip.
+
 
