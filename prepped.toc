@@ -2,13 +2,17 @@
 ## Title: Prepped
 ## Notes: Simple reminders for chores (Reagents, buffs, repairs)
 ## Author: Excessive
-## Version: 1.9.0
+## Version: 1.10.0
+## IconTexture: Interface\Icons\INV_Misc_Bag_08
+## Category: Reminders
+## AddonCompartmentFunc: Prepped_OpenOptions
 
 ## SavedVariables: PreppedSettings
 
 prepped.lua
 api.lua
 reminders_core.lua
+options.lua
 reminders_general.lua
 reminders_multiclass.lua
 reminders_shaman.lua
