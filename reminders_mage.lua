@@ -1,23 +1,26 @@
 -- Mage-specific reminders module
 local _, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local MageReminders = {}
+
+local ARCANE_INTELLECT = API.SpellFamily("Arcane Intellect", { 1459, 1460, 1461, 10156, 10157 }, { class = "MAGE", aura = true })
+local ARCANE_BRILLIANCE = API.SpellFamily("Arcane Brilliance", { 23028 }, { class = "MAGE", aura = true })
+local ARMORS = API.SpellFamily("Mage armors", {
+    168, 7300, 7301,          -- Frost Armor
+    7302, 7320, 10219, 10220, -- Ice Armor
+    6117, 22782, 22783,       -- Mage Armor
+}, { class = "MAGE", aura = true })
+local CONJURE_MANA_GEM = API.SpellFamily("Conjure Mana Gem", { 759, 3552, 10053, 10054 }, { class = "MAGE" })
+-- Forever-only destinations are caught by the English pattern until their IDs are known.
+local TELEPORTS = API.SpellFamily("Teleports", { 3561, 3562, 3563, 3565, 3566, 3567 }, { class = "MAGE", englishPattern = "^Teleport: " })
+local PORTALS = API.SpellFamily("Portals", { 10059, 11416, 11417, 11418, 11419, 11420 }, { class = "MAGE", englishPattern = "^Portal: " })
 
 local MageManaGems = {
     5514, -- Agate
     5513, -- Jade
     8007, -- Citrine
     8008, -- Ruby
-    22044, -- Emerald
-}
-
-local MageConjureSpells = {
-    "Conjure Mana Agate",
-    "Conjure Mana Jade",
-    "Conjure Mana Citrine",
-    "Conjure Mana Ruby",
-    "Conjure Mana Emerald",
 }
 
 local mageReminders = {
@@ -26,61 +29,40 @@ local mageReminders = {
         message = "Buff Missing: Arcane Intellect",
         messageLow = "Arcane Intellect expiring (%ss left)",
         mustRest = false,
-        requiredSpell = "Arcane Intellect",
-        missingBuffs = {"Arcane Intellect", "Arcane Brilliance"},
+        requiredFamily = ARCANE_INTELLECT,
+        buffMatcher = API.Matcher(ARCANE_INTELLECT, ARCANE_BRILLIANCE),
     },
-        {
-            id = "mage_armor_buff",
-            message = "Buff Missing: Mage Armor",
-            messageLow = "Armor buff expiring (%ss left)",
-            mustRest = false,
-            requiredAnySpell = {"Frost Armor", "Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
-            missingBuffs = {"Frost Armor", "Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
-        },
+    {
+        id = "mage_armor_buff",
+        message = "Buff Missing: Mage Armor",
+        messageLow = "Armor buff expiring (%ss left)",
+        mustRest = false,
+        requiredFamily = ARMORS,
+        buffMatcher = API.Matcher(ARMORS),
+    },
     {
         id = "mage_powder",
         message = "Low on reagents: Arcane Powder (%s left!)", -- %s will be replaced by the number
         itemCheck = 17020, -- Arcane Powder
+        vendorReagent = true,
         mustRest = true,
-        requiredSpell = "Arcane Brilliance"
+        requiredFamily = ARCANE_BRILLIANCE,
     },
     {
         id = "mage_rune_teleport",
         message = "Low on reagents: Rune of Teleportation (%s left!)",
         itemCheck = 17031, -- Rune of Teleportation
+        vendorReagent = true,
         mustRest = true,
-        requiredAnySpell = {
-            "Teleport: Theramore",
-            "Teleport: Stormwind",
-            "Teleport: Ironforge",
-            "Teleport: Darnassus",
-            "Teleport: Exodar",
-            "Teleport: Orgrimmar",
-            "Teleport: Undercity",
-            "Teleport: Thunder Bluff",
-            "Teleport: Stonard",
-            "Teleport: Silvermoon",
-            "Teleport: Shattrath"
-        }
+        requiredFamily = TELEPORTS,
     },
-        {
+    {
         id = "mage_rune_portals",
         message = "Low on reagents: Rune of Portals (%s left!)",
         itemCheck = 17032, -- Rune of Portals
+        vendorReagent = true,
         mustRest = true,
-        requiredAnySpell = {
-            "Portal: Theramore",
-            "Portal: Stormwind",
-            "Portal: Ironforge",
-            "Portal: Darnassus",
-            "Portal: Exodar",
-            "Portal: Orgrimmar",
-            "Portal: Undercity",
-            "Portal: Thunder Bluff",
-            "Portal: Stonard",
-            "Portal: Silvermoon",
-            "Portal: Shattrath"
-        }
+        requiredFamily = PORTALS,
     },
     {
         id = "mage_mana_gem",
@@ -89,18 +71,7 @@ local mageReminders = {
         inCombatOnly = false,
         manaGemCheck = true,
     },
-
 }
-
-local buffMatchers = {}
-local function GetBuffMatcher(config)
-    local matcher = buffMatchers[config.id]
-    if not matcher then
-        matcher = Compat.NameIn(config.missingBuffs)
-        buffMatchers[config.id] = matcher
-    end
-    return matcher
-end
 
 function MageReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
@@ -120,18 +91,18 @@ function MageReminders.CheckReminders()
             end
 
             -- Spell Learned Check
-            if trigger and config.requiredSpell then
-                if not Compat.KnowsSpellNamed(config.requiredSpell) then trigger = false end
+            if trigger and config.requiredFamily then
+                if not API.KnowsFamily(config.requiredFamily) then trigger = false end
             end
 
-            -- Any Spell Learned Check
-            if trigger and config.requiredAnySpell then
-                if not Compat.KnowsAnySpellNamed(config.requiredAnySpell) then trigger = false end
+            -- Reagents aren't needed with the Legacy perk "Reagent Economy"
+            if trigger and config.vendorReagent and API.HasReagentEconomy() then
+                trigger = false
             end
 
             -- Missing Buffs Check
-            if trigger and config.missingBuffs then
-                local state, remaining = Compat.FindPlayerBuff(GetBuffMatcher(config))
+            if trigger and config.buffMatcher then
+                local state, remaining = API.FindPlayerBuff(config.buffMatcher)
                 if state == "missing" then
                     -- Buff is missing: warn
                 elseif state == "present" and Prepped:IsLowEnabled(config.id)
@@ -146,7 +117,7 @@ function MageReminders.CheckReminders()
 
             -- Item Count Check
             if trigger and config.itemCheck then
-                local count = Compat.GetItemCount(config.itemCheck)
+                local count = C_Item.GetItemCount(config.itemCheck)
                 local threshold = 0
                 if Prepped and Prepped.GetRuleThreshold then
                      threshold = Prepped:GetRuleThreshold(config.id)
@@ -166,13 +137,13 @@ function MageReminders.CheckReminders()
                     trigger = false
                 else
                     -- 1. Check if ANY conjure spell is learned
-                    if not Compat.KnowsAnySpellNamed(MageConjureSpells) then
+                    if not API.KnowsFamily(CONJURE_MANA_GEM) then
                         trigger = false
                     else
                         -- 2. Check if ANY mana gem is in bags
                         local hasGem = false
                         for _, gemID in ipairs(MageManaGems) do
-                            if Compat.GetItemCount(gemID) > 0 then
+                            if C_Item.GetItemCount(gemID) > 0 then
                                 hasGem = true
                                 break
                             end

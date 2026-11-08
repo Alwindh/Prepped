@@ -40,7 +40,7 @@ Personalize the alerts to match your UI:
 
 ### Mage
 - **Missing Arcane Intellect**: Detects if you or your group are missing Intellect.
-- **Missing Armor Buff**: Reminds you to apply Frost, Ice, Mage, or Molten Armor.
+- **Missing Armor Buff**: Reminds you to apply Frost, Ice, or Mage Armor.
 - **Missing Mana Gem**: Alerts you to conjure a Mana Gem if you have the spell but no gem in your bags.
 - **Reagent Tracking**: Optional warnings while **resting** if you are low on:
   - **Arcane Powder** (for Brilliance)
@@ -48,9 +48,9 @@ Personalize the alerts to match your UI:
   - **Rune of Portals**
 
 ### Paladin
-- **Missing Seal**: Triggers in combat if you don't have a Seal active (with built-in logic to suppress the warning after using *Judgement*).
+- **Missing Seal**: Triggers in combat if you don't have a Seal active, including Forever's Seal of Fury (with built-in logic to suppress the warning after using *Judgement*).
 - **Missing Aura**: Ensures you always have a Paladin Aura active.
-- **Missing Blessing**: Reminds you to keep a Blessing active on yourself while adventuring.
+- **Missing Blessing**: Reminds you to keep a long-duration Blessing (Might, Wisdom, Kings, etc., or a Greater Blessing) active on yourself while adventuring.
 - **Missing Righteous Fury**: Alerts you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec.
 - **Reagent Tracking**: Monitors your stock of **Symbol of Kings** and **Symbol of Divinity** while resting.
 - **"Warn if Low"**: Optional early warnings for Seals and Righteous Fury—get notified before they expire.
@@ -59,15 +59,15 @@ Personalize the alerts to match your UI:
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
 - **Critical Ammo**: A survival alert if your ammo/thrown count drops below a dangerous level.
 - **Low Ammo**: A resting reminder to restock before your next adventure.
-- **Missing Weapon Poison**: Alerts if either weapon is missing poison (only if you know *Poisons* and have poison in bags).
+- **Missing Weapon Poison**: Alerts if either weapon is missing poison (only if you have the *Poisons* skill and poison in bags). A sharpening stone on the weapon doesn't count as a poison.
 - **Low Flash Powder**: Reminds you to stock up on Flash Powder while **resting** if you know *Vanish* (default: 10).
 - **Low Poison Stock**: Warns you while **resting** if your total poison count is low (default: 20, checks all poison types).
 - **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
 
 ### Shaman
-- **Missing Shield**: Alerts if Water Shield or Lightning Shield is missing.
+- **Missing Shield**: Alerts if Lightning Shield (or Water Shield, a Restoration talent in Forever) is missing.
 - **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
-  - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware.*
+  - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware. Sharpening stones and oils don't count as an imbue.*
 - **Reagent Tracking**: Warnings while **resting** for (each only once you know the spell that uses it):
   - **Ankhs** (Reincarnation)
   - **Fish Oil** (Water Walking)
@@ -94,9 +94,11 @@ Personalize the alerts to match your UI:
 
 ## WoW Forever Notes
 
-- **Buffs during combat**: Forever can hide buff information from addons during combat, boss encounters and PvP matches. When Prepped can't see your buffs it stays quiet instead of guessing, so in-combat reminders (Seal, Battle Shout, and other buffs that drop mid-fight) only show for buffs Blizzard keeps visible. Out of combat everything works as usual.
-- **Reagent Economy perk**: If your Legacy perks remove the need for class reagents, turn off the reagent reminders you no longer need in `/prepped`.
-- **Spec detection** (Protection/Holy Paladin, Enhancement Shaman) uses the points spent in each talent tree. `/prepped debug` prints what Prepped sees.
+- **Buffs during combat**: Forever can hide buff information from addons during combat, boss encounters and PvP matches. When Prepped can't see your buffs it stays quiet instead of guessing, so in-combat reminders (Seal, Battle Shout, and other buffs that drop mid-fight) only show for buffs Blizzard keeps visible. Out of combat everything works as usual. For a guaranteed in-combat alert, add the buff to Blizzard's **Cooldown Manager** and give it an "On Aura Removed" alert.
+- **Reagent Economy perk**: If you have this Legacy perk, Prepped detects it and hides the reminders for vendor reagents (Arcane Powder, Runes, Ankhs, Symbols, Flash Powder, …).
+- **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English).
+- **Spec detection** (Protection/Holy Paladin, Enhancement Shaman) uses the points spent in each talent tree.
+- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, which of your buffs Blizzard hides in combat, and any spell IDs your client doesn't know.
 
 ---
 

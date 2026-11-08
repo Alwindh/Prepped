@@ -1,6 +1,6 @@
 -- General reminders (Multi-class)
 local _, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local GeneralReminders = {}
 
@@ -15,28 +15,14 @@ local generalRules = {
     }
 }
 
-local function IsWaterItem(itemID)
-    local spellName = Compat.GetItemSpell(itemID)
-    -- "Drink" is standard water. "Refreshment" is Mage table food.
-    if spellName and (spellName == "Drink" or spellName == "Refreshment") then
-        return true
-    end
-    -- Fallback: Check if item is Consumable -> Food & Drink
-    -- However, this includes food.
-    -- For now, relying on Spell Name is the best heuristic for "Water" specifically.
-    return false
-end
-
 local function GetWaterCount()
     local count = 0
-    for bag = 0, 4 do
-        local numSlots = C_Container.GetContainerNumSlots(bag)
-        for slot = 1, numSlots do
+    for bag = 0, API.NumBags() do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info then
-                if IsWaterItem(info.itemID) then
-                    count = count + info.stackCount
-                end
+            -- Water = any item whose use effect is the "Drink" spell (any client language)
+            if info and API.IsDrinkItem(info.itemID) then
+                count = count + info.stackCount
             end
         end
     end

@@ -1,28 +1,29 @@
 -- Shaman-specific reminders module
 local _, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local ShamanReminders = {}
 
--- Talent tree order (same on TBC and Forever)
+-- Water Shield is a Restoration talent in Forever; its Forever spell ID isn't
+-- known yet, so the English name is a fallback until the TBC IDs are confirmed.
+local SHIELDS = API.SpellFamily("Shields", {
+    324, 325, 905, 945, 8134, 10431, 10432, -- Lightning Shield
+    24398, 33736,                           -- Water Shield
+}, { class = "SHAMAN", aura = true, englishNames = { "Water Shield" } })
+local REINCARNATION = API.SpellFamily("Reincarnation", { 20608 }, { class = "SHAMAN" })
+local WATER_WALKING = API.SpellFamily("Water Walking", { 546 }, { class = "SHAMAN" })
+local WATER_BREATHING = API.SpellFamily("Water Breathing", { 131 }, { class = "SHAMAN" })
+
+local IsShield = API.Matcher(SHIELDS)
+
+-- Talent tree order
 local TREE_ELEMENTAL = 1
 local TREE_RESTORATION = 3
 
--- Helper Functions
-local buffMatchers = {}
-local function GetBuffMatcher(config)
-    local matcher = buffMatchers[config.id]
-    if not matcher then
-        matcher = Compat.NameIn(config.missingBuffs)
-        buffMatchers[config.id] = matcher
-    end
-    return matcher
-end
-
 -- Returns false (missing), "low" (found but expiring), or true (satisfied).
 -- Buff data hidden by combat restrictions counts as satisfied: never warn blind.
-local function HasAnyBuff(config, minDuration)
-    local state, remaining = Compat.FindPlayerBuff(GetBuffMatcher(config))
+local function HasShield(minDuration)
+    local state, remaining = API.FindPlayerBuff(IsShield)
     if state == "missing" then return false end
     if state == "present" and minDuration and minDuration > 0 and remaining and remaining <= minDuration then
         return "low"
@@ -33,7 +34,7 @@ end
 local function IsEnhancementOrLeveling()
     -- Suppress only when Elemental or Restoration strictly leads.
     -- Enhancement leading, no talents yet, a tie, or no talent data -> show reminder.
-    local primaryTree = Compat.GetPrimaryTalentTree()
+    local primaryTree = API.GetPrimaryTalentTree()
     return primaryTree ~= TREE_ELEMENTAL and primaryTree ~= TREE_RESTORATION
 end
 
@@ -42,7 +43,7 @@ local function IsDualWielding()
     if not offHandID then return false end
 
     -- Use Instant info to avoid cache delay issues
-    local _, _, _, _, _, classID = Compat.GetItemInfoInstant(offHandID)
+    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(offHandID)
 
     if classID == 2 then return true end -- 2 is Enum.ItemClass.Weapon
     return false
@@ -53,8 +54,8 @@ local shamanReminders = {
         id = "shaman_shield_buff",
         message = "Buff missing: Shield",
         mustNotRest = true,
-        requiredAnySpell = {"Water Shield", "Lightning Shield"},
-        missingBuffs = {"Water Shield", "Lightning Shield"},
+        requiredFamily = SHIELDS,
+        shieldCheck = true,
     },
     {
         id = "shaman_weapon_buff",
@@ -67,21 +68,21 @@ local shamanReminders = {
         message = "Low on reagents: Ankh (%s left)",
         item = 17030,
         mustRest = true,
-        spell = 20608, -- Reincarnation
+        requiredFamily = REINCARNATION,
     },
     {
         id = "shaman_fish_oil",
         message = "Low on reagents: Fish Oil (%s left)",
         item = 17058,
         mustRest = true,
-        spell = 546, -- Water Walking
+        requiredFamily = WATER_WALKING,
     },
     {
         id = "shaman_fish_scales",
         message = "Low on reagents: Fish Scales (%s left)",
         item = 17057,
         mustRest = true,
-        spell = 131, -- Water Breathing
+        requiredFamily = WATER_BREATHING,
     },
 }
 
@@ -96,28 +97,25 @@ function ShamanReminders.CheckReminders()
             if config.mustRest and not isResting then trigger = false end
             if config.mustNotRest and isResting then trigger = false end
 
-            -- Spell Learned Check
-            if trigger and config.requiredSpell then
-                if not Compat.KnowsSpellNamed(config.requiredSpell) then trigger = false end
-            end
-            -- Any Spell Learned Check
-            if trigger and config.requiredAnySpell then
-                if not Compat.KnowsAnySpellNamed(config.requiredAnySpell) then trigger = false end
-            end
-            -- Reagents only matter once the spell that uses them is learned
-            if trigger and config.spell then
-                if not Compat.KnowsSpellID(config.spell) then trigger = false end
+            -- Spell Learned Check (reagents only matter once the spell that uses them is learned)
+            if trigger and config.requiredFamily then
+                if not API.KnowsFamily(config.requiredFamily) then trigger = false end
             end
 
-            -- Missing Buffs Check
-            if trigger and config.missingBuffs then
+            -- Reagents aren't needed with the Legacy perk "Reagent Economy"
+            if trigger and config.item and API.HasReagentEconomy() then
+                trigger = false
+            end
+
+            -- Missing Shield Check
+            if trigger and config.shieldCheck then
                 -- Get User Threshold (Duration)
                 local threshold = 0
                 if Prepped and Prepped.GetRuleThreshold then
                      threshold = Prepped:GetRuleThreshold(config.id, 0)
                 end
 
-                local status = HasAnyBuff(config, threshold)
+                local status = HasShield(threshold)
 
                 if status == true then
                     trigger = false
@@ -139,7 +137,8 @@ function ShamanReminders.CheckReminders()
                 if not IsEnhancementOrLeveling() then
                     trigger = false
                 else
-                    local hasMH, mhExp, hasOH, ohExp = Compat.GetWeaponEnchants()
+                    -- Only imbues count, not sharpening stones/oils (Forever lets them stack).
+                    local hasMH, mhExp, hasOH, ohExp = API.GetWeaponImbues()
                     -- hasMH/hasOH are booleans. mhExp/ohExp are numbers (milliseconds remaining).
 
                     local threshold = 0
@@ -184,7 +183,7 @@ function ShamanReminders.CheckReminders()
 
             -- Item Logic
             if trigger and config.item then
-                local count = Compat.GetItemCount(config.item)
+                local count = C_Item.GetItemCount(config.item)
                 local threshold = 0
                 if Prepped and Prepped.GetRuleThreshold then
                      threshold = Prepped:GetRuleThreshold(config.id)

@@ -1,9 +1,9 @@
 local addonName, ns = ...
-local Compat = ns.Compat
+local API = ns.API
 
 local Prepped = {}
 Prepped.reminderModules = {}
-Prepped.Compat = Compat
+Prepped.API = API
 -- Publish right away: the reminder modules register through this global, and
 -- they must not depend on everything below loading successfully.
 _G.Prepped = Prepped
@@ -15,29 +15,13 @@ end
 -- Settings
 local function EnsureSettings()
     if not PreppedSettings then PreppedSettings = {} end
-    
-    -- Migration / Initialization of new structure
+
     if PreppedSettings.useAccountWide == nil then
         PreppedSettings.useAccountWide = true
     end
-    
-    if not PreppedSettings.global then
-        PreppedSettings.global = {}
-        -- Migrate old top-level settings to global
-        if PreppedSettings.enabledRules then
-            PreppedSettings.global.enabledRules = PreppedSettings.enabledRules
-            PreppedSettings.enabledRules = nil
-        end
-        if PreppedSettings.enabledLowRules then
-            PreppedSettings.global.enabledLowRules = PreppedSettings.enabledLowRules
-            PreppedSettings.enabledLowRules = nil
-        end
-        if PreppedSettings.thresholds then
-            PreppedSettings.global.thresholds = PreppedSettings.thresholds
-            PreppedSettings.thresholds = nil
-        end
-    end
-    
+
+    if not PreppedSettings.global then PreppedSettings.global = {} end
+
     if not PreppedSettings.global.enabledRules then PreppedSettings.global.enabledRules = {} end
     if not PreppedSettings.global.enabledLowRules then PreppedSettings.global.enabledLowRules = {} end
     if not PreppedSettings.global.thresholds then PreppedSettings.global.thresholds = {} end
@@ -194,74 +178,86 @@ StaticPopupDialogs["PREPPED_RESET_ALL_SETTINGS"] = {
 -- Slash command to open options menu
 SLASH_PREPPED1 = "/prepped"
 SLASH_PREPPED2 = "/prepped"
+local function DebugLine(fmt, ...)
+    print("  " .. string.format(fmt, ...))
+end
+
+-- /prepped debug: everything needed to check Prepped's view of this client.
+function Prepped:PrintDebugReport()
+    local _, classToken = UnitClass("player")
+    print("|cff00ff00Prepped Debug:|r")
+    DebugLine("Client: %s", API.GetClientLabel())
+    DebugLine("Buff data hidden right now: %s", tostring(API.AreAurasRestricted()))
+
+    local trees = API.GetTalentTrees()
+    if trees then
+        local parts = {}
+        for i, tree in ipairs(trees) do
+            parts[#parts + 1] = string.format("%d. %s %d", i, tostring(tree.name or "?"), tree.points or 0)
+        end
+        DebugLine("Talent trees: %s (primary: %s)", table.concat(parts, ", "), tostring(API.GetPrimaryTalentTree()))
+    else
+        DebugLine("Talent trees: unavailable %s", tostring(API.lastTalentError or ""))
+    end
+
+    for _, slot in ipairs({ { "Main hand", Enum.WeaponSlot.MainHand }, { "Off hand", Enum.WeaponSlot.OffHand } }) do
+        local parts = {}
+        for _, enchant in ipairs(API.GetWeaponEnchantList(slot[2])) do
+            if enchant.hasEnchant then
+                parts[#parts + 1] = string.format("%s #%s (%ds)", API.DescribeEnchantType(enchant.enchantType),
+                    tostring(enchant.enchantID), math.floor((enchant.timeLeft or 0) / 1000))
+            end
+        end
+        DebugLine("%s enchants: %s", slot[1], #parts > 0 and table.concat(parts, ", ") or "none")
+    end
+
+    local rangedID = GetInventoryItemID("player", INVSLOT_RANGED)
+    if rangedID then
+        local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(rangedID)
+        local durability, maxDurability = GetInventoryItemDurability(INVSLOT_RANGED)
+        DebugLine("Ranged: item %s (class %s/%s), durability %s/%s, ammo count %s", tostring(rangedID),
+            tostring(classID), tostring(subClassID), tostring(durability), tostring(maxDurability), tostring(self:GetAmmoCount()))
+    else
+        DebugLine("Ranged: none")
+    end
+
+    if classToken == "ROGUE" then
+        DebugLine("Poisons skill rank: %d, Poisons spell known: %s", API.GetSkillRank(40), tostring(C_SpellBook.IsSpellKnown(2842)))
+    end
+
+    local hasPerk, source = API.HasReagentEconomy()
+    DebugLine("Reagent Economy perk: %s%s", hasPerk and "yes" or "no", source and (" (" .. source .. ")") or "")
+
+    for _, family in ipairs(API.GetAuraFamiliesForClass(classToken)) do
+        if #family.knownIDs > 0 then
+            local seen, labels = {}, {}
+            for _, id in ipairs(family.knownIDs) do
+                local label = API.DescribeAuraSecrecy(id)
+                if not seen[label] then
+                    seen[label] = true
+                    labels[#labels + 1] = label
+                end
+            end
+            DebugLine("%s in combat: %s", family.label, table.concat(labels, " / "))
+        end
+    end
+
+    local unresolved = API.GetUnresolvedSpellIDs()
+    DebugLine("Unknown spell IDs: %s", #unresolved > 0 and table.concat(unresolved, ", ") or "none")
+    if API.lastBuffScanError then
+        DebugLine("Last buff scan error: %s", tostring(API.lastBuffScanError))
+    end
+end
+
 SlashCmdList["PREPPED"] = function(msg)
     if msg == "debug" then
-        print("|cff00ff00Prepped Debug:|r")
-        print("  Client: " .. Compat.GetClientLabel())
-        print("  Buff data hidden by combat restrictions: " .. tostring(Compat.AreAurasRestricted()))
-        local trees = Compat.GetTalentTrees()
-        if trees then
-            for i, tree in ipairs(trees) do
-                print(string.format("  Talent tree %d (%s): %d points", i, tostring(tree.name or "?"), tree.points or 0))
-            end
-        else
-            print("  Talent trees: unavailable")
-        end
-        print("  Primary talent tree: " .. tostring(Compat.GetPrimaryTalentTree()))
-        if Compat.lastTalentError then
-            print("  Last talent read error: " .. tostring(Compat.lastTalentError))
-        end
-        if Compat.lastBuffScanError then
-            print("  Last buff scan error: " .. tostring(Compat.lastBuffScanError))
-        end
-        print("  GetSpecialization exists: " .. tostring(GetSpecialization ~= nil))
-        if GetSpecialization then
-            local specIndex = GetSpecialization()
-            print("  GetSpecialization() = " .. tostring(specIndex))
-            if specIndex then
-                local id, name, description, icon, role, primaryStat = GetSpecializationInfo(specIndex)
-                print("  Spec name=" .. tostring(name) .. " primaryStat=" .. tostring(primaryStat))
-            end
-        end
-        print("  GetTalentTabInfo exists: " .. tostring(GetTalentTabInfo ~= nil))
-        if GetTalentTabInfo then
-            for i = 1, 3 do
-                local a, b, c, d, e, f = GetTalentTabInfo(i)
-                print("  Tab " .. i .. " raw: |" .. tostring(a) .. "|" .. tostring(b) .. "|" .. tostring(c) .. "|" .. tostring(d) .. "|" .. tostring(e) .. "|" .. tostring(f) .. "|")
-            end
-        end
-        print("  GetNumTalents/GetTalentInfo exists: " .. tostring(GetNumTalents ~= nil) .. " / " .. tostring(GetTalentInfo ~= nil))
-        if GetNumTalents and GetTalentInfo then
-            for i = 1, 3 do
-                local total = 0
-                for j = 1, GetNumTalents(i) do
-                    local _, _, _, _, currentRank = GetTalentInfo(i, j)
-                    total = total + (currentRank or 0)
-                end
-                print("  Tab " .. i .. " counted points: " .. total)
-            end
-        end
+        Prepped:PrintDebugReport()
         return
     end
-    -- 1. Try the Modern 2026 API using our saved category object
-    if Prepped.settingsCategory and Settings and Settings.OpenToCategory then
-        -- We pass the ID of the category we stored during CreateOptionsPanel
-        local category = Prepped.settingsCategory
-        Settings.OpenToCategory(category.GetID and category:GetID() or category.ID)
-        return
-    end
-
-    -- 2. Fallback for older Classic versions
-    if type(InterfaceOptionsFrame_OpenToCategory) == "function" then
-        -- Still requires the double-call bug fix for older clients
-        InterfaceOptionsFrame_OpenToCategory("Prepped")
-        InterfaceOptionsFrame_OpenToCategory("Prepped")
-        return
-    end
-
-    -- 3. Last resort: Just open the settings at all
-    if Settings and Settings.OpenToCategory then
-        Settings.OpenToCategory()
+    if Prepped.settingsCategory then
+        Settings.OpenToCategory(Prepped.settingsCategory:GetID())
+    else
+        print("|cffff8000Prepped:|r the options panel failed to load; please report /prepped debug output.")
     end
 end
 
@@ -280,10 +276,10 @@ function Prepped:GetAmmoCount()
     local itemID = GetInventoryItemID("player", RANGED_SLOT)
     if not itemID then return nil end
 
-    local _, _, _, _, _, itemClassID, itemSubClassID = Compat.GetItemInfoInstant(itemID)
+    local _, _, _, _, _, itemClassID, itemSubClassID = C_Item.GetItemInfoInstant(itemID)
     if itemClassID == ITEM_CLASS_WEAPON and itemSubClassID == WEAPON_SUBCLASS_THROWN then
-        -- Vanilla-style thrown weapons (Forever) are stacks that get used up.
-        -- TBC-style thrown weapons have durability instead and never run out.
+        -- Forever's thrown weapons reportedly have durability and never run out;
+        -- a stackable thrown weapon (no durability) is counted like ammo.
         local _, maxDurability = GetInventoryItemDurability(RANGED_SLOT)
         if maxDurability and maxDurability > 0 then return nil end
         return GetInventoryItemCount("player", RANGED_SLOT)
@@ -394,8 +390,7 @@ function Prepped:CheckReminders()
 end
 
 local function GetAddonVersion()
-    local getMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-    return (getMetadata and getMetadata(addonName, "Version")) or "?"
+    return C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"
 end
 
 function Prepped:ShowWelcomeMessage()
@@ -435,6 +430,9 @@ Prepped.AllRules = {
     { id = "rogue_no_ammo", label = "No Ammo/Thrown Equipped", group = "Rogue", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
     { id = "rogue_ammo_low", label = "Low Ammo/Thrown", group = "Rogue", defaultThreshold = 100, description = "Show a warning when your ammo/thrown count drops below the configured threshold when resting." },
     { id = "rogue_ammo_critical", label = "Critical Ammo/Thrown", group = "Rogue", defaultThreshold = 20, description = "Show a warning when your ammo/thrown count drops below the critical threshold at any time." },
+    { id = "rogue_weapon_poison", label = "Missing Weapon Poison", group = "Rogue", hasLowWarningToggle = true, defaultThreshold = 60, lowLabel = "seconds remaining.", description = "Reminds you to apply poison to your weapons when you have poisons in your bags." },
+    { id = "rogue_poison_stock", label = "Low Poison Stock", group = "Rogue", defaultThreshold = 20, description = "Show a warning when your total poison count drops below the configured threshold when resting." },
+    { id = "rogue_flash_powder", label = "Low Flash Powder", group = "Rogue", defaultThreshold = 10, description = "Show a warning when your Flash Powder count drops below the configured threshold when resting (for Vanish)." },
 
     { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
     { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, description = "Show a warning when your ammo/thrown count drops below the configured threshold when resting." },
@@ -453,38 +451,20 @@ Prepped.AllRules = {
     -- Add more here as you add rules
 }
 
--- Color picker: current clients (TBC Anniversary and Forever) use
--- SetupColorPickerAndShow/swatchFunc; the old field-based setup is kept as a fallback.
+-- Color picker
 local function GetPickerAlpha()
-    if ColorPickerFrame.GetColorAlpha then
-        return ColorPickerFrame:GetColorAlpha()
-    elseif OpacitySliderFrame then
-        return 1 - OpacitySliderFrame:GetValue()
-    end
-    return 1
+    return ColorPickerFrame:GetColorAlpha()
 end
 
 local function OpenColorPicker(color, hasOpacity, onChange, onCancel)
-    if ColorPickerFrame.SetupColorPickerAndShow then
-        ColorPickerFrame:SetupColorPickerAndShow({
-            r = color.r, g = color.g, b = color.b,
-            opacity = color.a or 1,
-            hasOpacity = hasOpacity,
-            swatchFunc = onChange,
-            opacityFunc = onChange,
-            cancelFunc = onCancel,
-        })
-    else
-        ColorPickerFrame.func = onChange
-        ColorPickerFrame.swatchFunc = onChange
-        ColorPickerFrame.opacityFunc = onChange
-        ColorPickerFrame.cancelFunc = onCancel
-        ColorPickerFrame.hasOpacity = hasOpacity
-        ColorPickerFrame.opacity = 1 - (color.a or 1)
-        ColorPickerFrame:SetColorRGB(color.r, color.g, color.b)
-        ColorPickerFrame:Hide() -- Toggle refresh
-        ColorPickerFrame:Show()
-    end
+    ColorPickerFrame:SetupColorPickerAndShow({
+        r = color.r, g = color.g, b = color.b,
+        opacity = color.a or 1,
+        hasOpacity = hasOpacity,
+        swatchFunc = onChange,
+        opacityFunc = onChange,
+        cancelFunc = onCancel,
+    })
 end
 
 -- Options panel for Blizzard Interface Options
@@ -1014,15 +994,9 @@ local function CreateOptionsPanel()
     end)
 
 
-    if Settings and Settings.RegisterCanvasLayoutCategory then
-        -- This is for the 2026 Anniversary/Modern client
-        local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name, panel.name)
-        Settings.RegisterAddOnCategory(category)
-        Prepped.settingsCategory = category -- SAVE THIS FOR THE SLASH COMMAND
-    elseif InterfaceOptions_AddCategory then
-        -- Legacy fallback
-        InterfaceOptions_AddCategory(panel)
-    end
+    local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+    Settings.RegisterAddOnCategory(category)
+    Prepped.settingsCategory = category -- used by /prepped
 end
 
 -- A problem in the options UI must never stop the reminders from running.
@@ -1078,15 +1052,15 @@ for _, event in ipairs({
     "ACTIVE_TALENT_GROUP_CHANGED",
     "TRAIT_CONFIG_UPDATED",
 }) do
-    Compat.RegisterEvent(container, event)
+    API.RegisterEvent(container, event)
 end
 -- Unit events only for the units we care about (avoids firing for every nameplate/raid member).
-Compat.RegisterUnitEvent(container, "UNIT_INVENTORY_CHANGED", "player")
-Compat.RegisterUnitEvent(container, "UNIT_AURA", "player")
-Compat.RegisterUnitEvent(container, "UNIT_STATS", "player")
-Compat.RegisterUnitEvent(container, "UNIT_PET", "player")
-Compat.RegisterUnitEvent(container, "UNIT_HEALTH", "player", "pet")
-Compat.RegisterUnitEvent(container, "UNIT_HAPPINESS", "pet")
+API.RegisterUnitEvent(container, "UNIT_INVENTORY_CHANGED", "player")
+API.RegisterUnitEvent(container, "UNIT_AURA", "player")
+API.RegisterUnitEvent(container, "UNIT_STATS", "player")
+API.RegisterUnitEvent(container, "UNIT_PET", "player")
+API.RegisterUnitEvent(container, "UNIT_HEALTH", "player", "pet")
+API.RegisterUnitEvent(container, "UNIT_HAPPINESS", "pet")
 
 local cacheInvalidatingEvents = {
     PLAYER_ENTERING_WORLD = true,
@@ -1100,7 +1074,7 @@ local cacheInvalidatingEvents = {
 
 container:SetScript("OnEvent", function(self, event, ...)
     if cacheInvalidatingEvents[event] then
-        Compat.InvalidateCaches()
+        API.InvalidateCaches()
     end
 
     if event == "ADDON_LOADED" then
