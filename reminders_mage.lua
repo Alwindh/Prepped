@@ -1,14 +1,6 @@
 -- Mage-specific reminders module
-function HasAnyBuff(buffList)
-    for i = 1, 40 do
-        local name = UnitBuff("player", i)
-        if not name then break end
-        for _, buff in ipairs(buffList) do
-            if name == buff then return true end
-        end
-    end
-    return false
-end
+local _, ns = ...
+local Compat = ns.Compat
 
 local MageReminders = {}
 
@@ -36,23 +28,21 @@ local mageReminders = {
         mustRest = false,
         requiredSpell = "Arcane Intellect",
         missingBuffs = {"Arcane Intellect", "Arcane Brilliance"},
-        buffNames = {"Arcane Intellect", "Arcane Brilliance"},
     },
         {
             id = "mage_armor_buff",
             message = "Buff Missing: Mage Armor",
             messageLow = "Armor buff expiring (%ss left)",
             mustRest = false,
-            requiredAnySpell = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
-            missingBuffs = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
-            buffNames = {"Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
+            requiredAnySpell = {"Frost Armor", "Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
+            missingBuffs = {"Frost Armor", "Frozen Armor", "Ice Armor", "Mage Armor", "Molten Armor"},
         },
     {
         id = "mage_powder",
         message = "Low on reagents: Arcane Powder (%s left!)", -- %s will be replaced by the number
         itemCheck = 17020, -- Arcane Powder
         mustRest = true,
-        requiredSpell = "Arcane Brilliance" 
+        requiredSpell = "Arcane Brilliance"
     },
     {
         id = "mage_rune_teleport",
@@ -61,14 +51,14 @@ local mageReminders = {
         mustRest = true,
         requiredAnySpell = {
             "Teleport: Theramore",
-            "Teleport: Stormwind", 
-            "Teleport: Ironforge", 
-            "Teleport: Darnassus", 
-            "Teleport: Exodar", 
-            "Teleport: Orgrimmar", 
-            "Teleport: Undercity", 
-            "Teleport: Thunder Bluff", 
-            "Teleport: Stonard", 
+            "Teleport: Stormwind",
+            "Teleport: Ironforge",
+            "Teleport: Darnassus",
+            "Teleport: Exodar",
+            "Teleport: Orgrimmar",
+            "Teleport: Undercity",
+            "Teleport: Thunder Bluff",
+            "Teleport: Stonard",
             "Teleport: Silvermoon",
             "Teleport: Shattrath"
         }
@@ -80,14 +70,14 @@ local mageReminders = {
         mustRest = true,
         requiredAnySpell = {
             "Portal: Theramore",
-            "Portal: Stormwind", 
-            "Portal: Ironforge", 
-            "Portal: Darnassus", 
-            "Portal: Exodar", 
-            "Portal: Orgrimmar", 
-            "Portal: Undercity", 
-            "Portal: Thunder Bluff", 
-            "Portal: Stonard", 
+            "Portal: Stormwind",
+            "Portal: Ironforge",
+            "Portal: Darnassus",
+            "Portal: Exodar",
+            "Portal: Orgrimmar",
+            "Portal: Undercity",
+            "Portal: Thunder Bluff",
+            "Portal: Stonard",
             "Portal: Silvermoon",
             "Portal: Shattrath"
         }
@@ -99,43 +89,17 @@ local mageReminders = {
         inCombatOnly = false,
         manaGemCheck = true,
     },
-    
+
 }
 
-local function IsSpellLearned(spellName)
-    -- iterate spellbook
-    for i = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(i)
-        for j = offset + 1, offset + numSpells do
-            local spellNameBook = GetSpellBookItemName(j, BOOKTYPE_SPELL)
-            if spellNameBook == spellName then return true end
-        end
+local buffMatchers = {}
+local function GetBuffMatcher(config)
+    local matcher = buffMatchers[config.id]
+    if not matcher then
+        matcher = Compat.NameIn(config.missingBuffs)
+        buffMatchers[config.id] = matcher
     end
-    return false
-end
-
-local function IsAnySpellLearned(spellList)
-    for _, spell in ipairs(spellList) do
-        if IsSpellLearned(spell) then return true end
-    end
-    return false
-end
-
-local function GetBuffExpiration(buffNames)
-    for i = 1, 40 do
-        local name, _, _, _, duration, expirationTime = UnitAura("player", i, "HELPFUL")
-        if not name then break end
-        for _, buffName in ipairs(buffNames) do
-            if name == buffName then
-                if expirationTime and expirationTime > 0 then
-                    return expirationTime - GetTime()
-                else
-                    return 999
-                end
-            end
-        end
-    end
-    return nil
+    return matcher
 end
 
 function MageReminders.CheckReminders()
@@ -157,46 +121,43 @@ function MageReminders.CheckReminders()
 
             -- Spell Learned Check
             if trigger and config.requiredSpell then
-                if not IsSpellLearned(config.requiredSpell) then trigger = false end
+                if not Compat.KnowsSpellNamed(config.requiredSpell) then trigger = false end
             end
 
             -- Any Spell Learned Check
             if trigger and config.requiredAnySpell then
-                if not IsAnySpellLearned(config.requiredAnySpell) then trigger = false end
+                if not Compat.KnowsAnySpellNamed(config.requiredAnySpell) then trigger = false end
             end
 
             -- Missing Buffs Check
             if trigger and config.missingBuffs then
-                if HasAnyBuff(config.missingBuffs) then
-                    -- Buff is present, but check for low warning
-                    if config.buffNames and Prepped:IsLowEnabled(config.id) then
-                        local remaining = GetBuffExpiration(config.buffNames)
-                        if remaining and remaining <= Prepped:GetRuleThreshold(config.id, 60) then
-                            trigger = true
-                            displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
-                        else
-                            trigger = false
-                        end
-                    else
-                        trigger = false
-                    end
+                local state, remaining = Compat.FindPlayerBuff(GetBuffMatcher(config))
+                if state == "missing" then
+                    -- Buff is missing: warn
+                elseif state == "present" and Prepped:IsLowEnabled(config.id)
+                    and remaining and remaining <= Prepped:GetRuleThreshold(config.id, 60) then
+                    -- Buff is present but running out
+                    displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
+                else
+                    -- Present, or hidden by combat restrictions ("unknown")
+                    trigger = false
                 end
             end
 
             -- Item Count Check
             if trigger and config.itemCheck then
-                local count = GetItemCount(config.itemCheck)
+                local count = Compat.GetItemCount(config.itemCheck)
                 local threshold = 0
                 if Prepped and Prepped.GetRuleThreshold then
                      threshold = Prepped:GetRuleThreshold(config.id)
                 end
-                if count >= threshold then 
-                    trigger = false 
+                if count >= threshold then
+                    trigger = false
                 else
                     displayMessage = string.format(config.message, count)
                 end
             end
-            
+
             -- Mana Gem Check
             if trigger and config.manaGemCheck then
                 -- Don't show mana gem reminder when in combat
@@ -205,13 +166,13 @@ function MageReminders.CheckReminders()
                     trigger = false
                 else
                     -- 1. Check if ANY conjure spell is learned
-                    if not IsAnySpellLearned(MageConjureSpells) then
+                    if not Compat.KnowsAnySpellNamed(MageConjureSpells) then
                         trigger = false
                     else
                         -- 2. Check if ANY mana gem is in bags
                         local hasGem = false
                         for _, gemID in ipairs(MageManaGems) do
-                            if GetItemCount(gemID) > 0 then
+                            if Compat.GetItemCount(gemID) > 0 then
                                 hasGem = true
                                 break
                             end

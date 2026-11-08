@@ -1,4 +1,7 @@
 -- General reminders (Multi-class)
+local _, ns = ...
+local Compat = ns.Compat
+
 local GeneralReminders = {}
 
 local generalRules = {
@@ -13,7 +16,7 @@ local generalRules = {
 }
 
 local function IsWaterItem(itemID)
-    local spellName = GetItemSpell(itemID)
+    local spellName = Compat.GetItemSpell(itemID)
     -- "Drink" is standard water. "Refreshment" is Mage table food.
     if spellName and (spellName == "Drink" or spellName == "Refreshment") then
         return true

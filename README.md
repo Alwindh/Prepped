@@ -1,6 +1,8 @@
 # Prepped
 
-**Prepped** is a modular, "set-it-and-forget-it" reminder addon for WoW Classic/Anniversary. It helps you avoid common mistakes—like walking into a dungeon without water or pulling a boss without your pet—by providing clear, non-intrusive, and highly configurable alerts.
+**Prepped** is a modular, "set-it-and-forget-it" reminder addon for **WoW Forever** and **TBC Anniversary**. It helps you avoid common mistakes—like walking into a dungeon without water or pulling a boss without your pet—by providing clear, non-intrusive, and highly configurable alerts.
+
+One download works on both clients (interface `16001` for Forever, `20505`/`20506` for TBC Anniversary).
 
 ---
 
@@ -40,7 +42,7 @@ Personalize the alerts to match your UI:
 
 ### Mage
 - **Missing Arcane Intellect**: Detects if you or your group are missing Intellect.
-- **Missing Armor Buff**: Reminds you to apply Frozen, Ice, Mage, or Molten Armor.
+- **Missing Armor Buff**: Reminds you to apply Frost, Ice, Mage, or Molten Armor.
 - **Missing Mana Gem**: Alerts you to conjure a Mana Gem if you have the spell but no gem in your bags.
 - **Reagent Tracking**: Optional warnings while **resting** if you are low on:
   - **Arcane Powder** (for Brilliance)
@@ -68,10 +70,10 @@ Personalize the alerts to match your UI:
 - **Missing Shield**: Alerts if Water Shield or Lightning Shield is missing.
 - **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
   - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware.*
-- **Reagent Tracking**: Warnings while **resting** for:
+- **Reagent Tracking**: Warnings while **resting** for (each only once you know the spell that uses it):
   - **Ankhs** (Reincarnation)
   - **Fish Oil** (Water Walking)
-  - **Fish Scales** (Water Shield)
+  - **Fish Scales** (Water Breathing)
 - **"Warn if Low"**: A special toggle for Shields and Weapon buffs—reminds you to re-apply them *before* they expire (configurable seconds threshold).
 
 ### Warrior
@@ -92,10 +94,20 @@ Personalize the alerts to match your UI:
 
 ---
 
+## WoW Forever Notes
+
+- **Buffs during combat**: Forever can hide buff information from addons during combat, boss encounters and PvP matches. When Prepped can't see your buffs it stays quiet instead of guessing, so in-combat reminders (Seal, Battle Shout, and other buffs that drop mid-fight) only show for buffs Blizzard keeps visible. Out of combat everything works as usual.
+- **Reagent Economy perk**: If your Legacy perks remove the need for class reagents, turn off the reagent reminders you no longer need in `/prepped`.
+- **Spec detection** (Protection/Holy Paladin, Enhancement Shaman) uses the points spent in each talent tree. `/prepped debug` prints what Prepped sees.
+
+---
+
 ## Installation
 
 1. Download the latest release.
-2. Extract the folder into your `World of Warcraft/_classic_/Interface/AddOns/` directory.
+2. Extract the folder into your AddOns directory:
+   - WoW Forever: `World of Warcraft/_forever_/Interface/AddOns/`
+   - TBC Anniversary: `World of Warcraft/_anniversary_/Interface/AddOns/`
 3. Ensure the folder is named exactly `Prepped`.
 4. (Optional) Install via **CurseForge** or **WowUP** for automatic updates.
 

@@ -1,123 +1,48 @@
 -- Shaman-specific reminders module
+local _, ns = ...
+local Compat = ns.Compat
+
 local ShamanReminders = {}
 
+-- Talent tree order (same on TBC and Forever)
+local TREE_ELEMENTAL = 1
+local TREE_RESTORATION = 3
+
 -- Helper Functions
-local function HasAnyBuff(buffList, minDuration)
-    local found = false
-    local low = false
-    
-    for i = 1, 40 do
-        local name, icon, count, debuffType, duration, expirationTime = UnitBuff("player", i)
-        if not name then break end
-        for _, buff in ipairs(buffList) do
-            if name == buff then
-                found = true
-                -- Check duration if specified
-                if minDuration and minDuration > 0 and expirationTime and expirationTime > 0 then
-                     local remaining = expirationTime - GetTime()
-                     if remaining <= minDuration then
-                         low = true
-                     end
-                end
-                break
-            end
-        end
-        if found then break end
+local buffMatchers = {}
+local function GetBuffMatcher(config)
+    local matcher = buffMatchers[config.id]
+    if not matcher then
+        matcher = Compat.NameIn(config.missingBuffs)
+        buffMatchers[config.id] = matcher
     end
-    
-    if not found then return false end -- Missing
-    if low then return "low" end      -- Found but low
-    return true                       -- Satisfied
+    return matcher
 end
 
-local function IsSpellLearned(spellName)
-    for i = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(i)
-        for j = offset + 1, offset + numSpells do
-            local spellNameBook = GetSpellBookItemName(j, BOOKTYPE_SPELL)
-            if spellNameBook == spellName then return true end
-        end
+-- Returns false (missing), "low" (found but expiring), or true (satisfied).
+-- Buff data hidden by combat restrictions counts as satisfied: never warn blind.
+local function HasAnyBuff(config, minDuration)
+    local state, remaining = Compat.FindPlayerBuff(GetBuffMatcher(config))
+    if state == "missing" then return false end
+    if state == "present" and minDuration and minDuration > 0 and remaining and remaining <= minDuration then
+        return "low"
     end
-    return false
-end
-
-local function IsAnySpellLearned(spellList)
-    for _, spell in ipairs(spellList) do
-        if IsSpellLearned(spell) then return true end
-    end
-    return false
+    return true
 end
 
 local function IsEnhancementOrLeveling()
-    -- Check Primary Stat. Agility (2) implies Melee/Enhancement.
-    -- Intellect (4) implies Caster/Healer.
-
-    -- Retail / Cata+: GetSpecialization returns a valid specIndex.
-    -- On Classic clients (TBC Anniversary etc.) the function may exist but return nil,
-    -- so only trust it when specIndex is non-nil.
-    if GetSpecialization then
-        local specIndex = GetSpecialization()
-        if specIndex then
-            local id, name, description, icon, role, primaryStat = GetSpecializationInfo(specIndex)
-
-            -- Enhancement uses Agility (2); also check name as a fallback
-            if primaryStat == 2 then return true end
-            if name == "Enhancement" then return true end
-
-            return false
-        end
-        -- specIndex is nil: could be a Classic client where GetSpecialization exists
-        -- but has no meaning, OR a Cata+ player who hasn't chosen a spec yet.
-        -- Fall through to talent-tree detection below.
-    end
-
-    -- Classic Era / TBC / WotLK: count actual talent ranks via GetTalentInfo.
-    -- GetTalentTabInfo can return empty strings for point totals on some clients,
-    -- so we sum up currentRank per talent ourselves instead.
-    --   Shaman tab 1 = Elemental, tab 2 = Enhancement, tab 3 = Restoration
-    if GetNumTalents and GetTalentInfo then
-        local function CountTabPoints(tabIndex)
-            local total = 0
-            for j = 1, GetNumTalents(tabIndex) do
-                local _, _, _, _, currentRank = GetTalentInfo(tabIndex, j)
-                total = total + (currentRank or 0)
-            end
-            return total
-        end
-
-        local elemPoints    = CountTabPoints(1)
-        local enhPoints     = CountTabPoints(2)
-        local restorePoints = CountTabPoints(3)
-
-        -- Suppress only when Elemental or Restoration strictly leads
-        if elemPoints > enhPoints and elemPoints > restorePoints then
-            return false -- Elemental
-        end
-        if restorePoints > enhPoints and restorePoints > elemPoints then
-            return false -- Restoration
-        end
-
-        -- Enhancement leads, all tabs zero (no talents yet), or a tie -> show reminder
-        return true
-    end
-
-    -- No spec data available at all: default to showing the reminder
-    return true
+    -- Suppress only when Elemental or Restoration strictly leads.
+    -- Enhancement leading, no talents yet, a tie, or no talent data -> show reminder.
+    local primaryTree = Compat.GetPrimaryTalentTree()
+    return primaryTree ~= TREE_ELEMENTAL and primaryTree ~= TREE_RESTORATION
 end
 
 local function IsDualWielding()
     local offHandID = GetInventoryItemID("player", 17)
     if not offHandID then return false end
-    
+
     -- Use Instant info to avoid cache delay issues
-    local classID
-    if GetItemInfoInstant then
-        _, _, _, _, _, classID = GetItemInfoInstant(offHandID)
-    else
-        -- Legacy Fallback
-        local _, _, _, _, _, cID = GetItemInfo(offHandID)
-        classID = cID
-    end
+    local _, _, _, _, _, classID = Compat.GetItemInfoInstant(offHandID)
 
     if classID == 2 then return true end -- 2 is Enum.ItemClass.Weapon
     return false
@@ -142,21 +67,21 @@ local shamanReminders = {
         message = "Low on reagents: Ankh (%s left)",
         item = 17030,
         mustRest = true,
-        spell = 20608,
+        spell = 20608, -- Reincarnation
     },
     {
         id = "shaman_fish_oil",
         message = "Low on reagents: Fish Oil (%s left)",
         item = 17058,
         mustRest = true,
-        spell = 546,
+        spell = 546, -- Water Walking
     },
     {
         id = "shaman_fish_scales",
         message = "Low on reagents: Fish Scales (%s left)",
         item = 17057,
         mustRest = true,
-        spell = 131,
+        spell = 131, -- Water Breathing
     },
 }
 
@@ -173,13 +98,17 @@ function ShamanReminders.CheckReminders()
 
             -- Spell Learned Check
             if trigger and config.requiredSpell then
-                if not IsSpellLearned(config.requiredSpell) then trigger = false end
+                if not Compat.KnowsSpellNamed(config.requiredSpell) then trigger = false end
             end
             -- Any Spell Learned Check
             if trigger and config.requiredAnySpell then
-                if not IsAnySpellLearned(config.requiredAnySpell) then trigger = false end
+                if not Compat.KnowsAnySpellNamed(config.requiredAnySpell) then trigger = false end
             end
-            
+            -- Reagents only matter once the spell that uses them is learned
+            if trigger and config.spell then
+                if not Compat.KnowsSpellID(config.spell) then trigger = false end
+            end
+
             -- Missing Buffs Check
             if trigger and config.missingBuffs then
                 -- Get User Threshold (Duration)
@@ -187,11 +116,11 @@ function ShamanReminders.CheckReminders()
                 if Prepped and Prepped.GetRuleThreshold then
                      threshold = Prepped:GetRuleThreshold(config.id, 0)
                 end
-                
-                local status = HasAnyBuff(config.missingBuffs, threshold)
-                
-                if status == true then 
-                    trigger = false 
+
+                local status = HasAnyBuff(config, threshold)
+
+                if status == true then
+                    trigger = false
                 elseif status == "low" then
                     -- Respect "Warn if Low" setting
                     if Prepped and Prepped.IsLowEnabled and not Prepped:IsLowEnabled(config.id) then
@@ -200,44 +129,44 @@ function ShamanReminders.CheckReminders()
                         trigger = true
                         displayMessage = "SHIELD RUNNING LOW!"
                     end
-                else 
+                else
                     trigger = true -- Missing
                 end
             end
-            
+
             -- Weapon Buff Check
             if trigger and config.weaponCheck then
-                if not IsEnhancementOrLeveling() then 
-                    trigger = false 
+                if not IsEnhancementOrLeveling() then
+                    trigger = false
                 else
-                    local hasMH, mhExp, _, _, hasOH, ohExp = GetWeaponEnchantInfo()
+                    local hasMH, mhExp, hasOH, ohExp = Compat.GetWeaponEnchants()
                     -- hasMH/hasOH are booleans. mhExp/ohExp are numbers (milliseconds remaining).
-                    
+
                     local threshold = 0
                     if Prepped and Prepped.GetRuleThreshold then
                          threshold = Prepped:GetRuleThreshold(config.id, 0)
                     end
                     local thresholdMs = threshold * 1000
-                    
+
                     local missing = false
                     local isLow = false
-                    
+
                     -- Main Hand Logic
-                    if not hasMH then 
-                        missing = true 
+                    if not hasMH then
+                        missing = true
                     elseif mhExp and mhExp > 0 and mhExp <= thresholdMs then
                         isLow = true
                     end
-                    
+
                     -- Off Hand Logic (only if DW)
                     if IsDualWielding() then
-                        if not hasOH then 
-                            missing = true 
+                        if not hasOH then
+                            missing = true
                         elseif ohExp and ohExp > 0 and ohExp <= thresholdMs then
                             isLow = true
                         end
                     end
-                    
+
                     if missing then
                         trigger = true
                     elseif isLow then
@@ -252,10 +181,10 @@ function ShamanReminders.CheckReminders()
                     end
                 end
             end
-            
+
             -- Item Logic
             if trigger and config.item then
-                local count = GetItemCount(config.item)
+                local count = Compat.GetItemCount(config.item)
                 local threshold = 0
                 if Prepped and Prepped.GetRuleThreshold then
                      threshold = Prepped:GetRuleThreshold(config.id)
