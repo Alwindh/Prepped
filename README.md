@@ -6,21 +6,13 @@
 
 ## Configuration and Options
 
-Access the settings menu in-game via `/prepped`.
+Prepped's options live in the game's own settings: **Options → AddOns → Prepped**. Open them with `/prepped` or from the AddOns menu on the minimap.
 
-### Global Settings
-- **Master Toggle**: Enable or disable the entire addon with one click.
-- **Account-Wide vs. Character-Specific**: Choose whether your settings (thresholds, enabled rules, etc.) apply to all your characters or if each character has their own unique configuration.
-- **Reset All Settings**: A safety-locked button to revert everything to factory defaults.
-- **Welcome Message**: Toggle the "Prepped Loaded" message when you log in.
+- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water and repair reminders, and **Reset All Settings**.
+- **Appearance**: font size, minimum bar width, text color, background color and background opacity.
+- **One page per class** (Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warrior): every reminder can be switched on or off. Stock reminders have a slider for the amount to warn at; buff reminders have an extra **Warn when expiring** option with a seconds slider.
 
-### UI and Appearance
-Personalize the alerts to match your UI:
-- **Font Size**: Scale the reminder text from subtle to unmissable (10pt to 40pt).
-- **Minimum Width**: Set a minimum bar width, or let the bars grow dynamically to fit the text length.
-- **Custom Colors**: Full Color Picker support for:
-  - **Font Color**: Set any color for your alerts.
-  - **Background Color and Opacity**: Choose the bar color and transparency (e.g., solid black or subtle glassmorphism).
+Settings are shared by all characters (**Account-wide**) unless you switch that off; then each character gets its own settings.
 
 ---
 
