@@ -1,4 +1,7 @@
 -- Warrior-specific reminders module
+local _, ns = ...
+local Compat = ns.Compat
+
 local WarriorReminders = {}
 
 local warriorReminders = {
@@ -28,33 +31,10 @@ local warriorReminders = {
 
 -- Checks if the player has learned Battle Shout
 local function PlayerKnowsBattleShout()
-    for i = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(i)
-        for j = offset + 1, offset + numSpells do
-            local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
-            if spellName == "Battle Shout" then
-                return true
-            end
-        end
-    end
-    return false
+    return Compat.KnowsSpellNamed("Battle Shout")
 end
 
--- Checks for Battle Shout buff and returns remaining time
-local function GetBattleShoutExpiration()
-    for i = 1, 40 do
-        local name, _, _, _, duration, expirationTime = UnitAura("player", i, "HELPFUL")
-        if not name then break end
-        if name == "Battle Shout" then
-            if expirationTime and expirationTime > 0 then
-                return expirationTime - GetTime()
-            else
-                return 999
-            end
-        end
-    end
-    return nil
-end
+local IsBattleShout = Compat.NameIn({ "Battle Shout" })
 
 function WarriorReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
@@ -86,11 +66,12 @@ function WarriorReminders.CheckReminders()
                 -- Battle Shout Logic
                 if config.id == "warrior_battle_shout" then
                     if not isMounted and PlayerKnowsBattleShout() then
-                        local remaining = GetBattleShoutExpiration()
-                        if not remaining then
+                        -- In combat, Forever may hide buff data ("unknown"): don't warn then.
+                        local state, remaining = Compat.FindPlayerBuff(IsBattleShout)
+                        if state == "missing" then
                             trigger = true
                             displayMessage = config.message
-                        elseif Prepped:IsLowEnabled(config.id) then
+                        elseif state == "present" and remaining and Prepped:IsLowEnabled(config.id) then
                             local threshold = Prepped:GetRuleThreshold(config.id, 10)
                             if remaining <= threshold then
                                 trigger = true

@@ -1,4 +1,7 @@
 -- Rogue-specific reminders module
+local _, ns = ...
+local Compat = ns.Compat
+
 local RogueReminders = {}
 
 local rogueReminders = {
@@ -55,40 +58,19 @@ local poisonItemIDs = {
 
 -- Checks if the player has learned Vanish
 local function PlayerKnowsVanish()
-    for i = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(i)
-        for j = offset + 1, offset + numSpells do
-            local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
-            if spellName == "Vanish" then
-                return true
-            end
-        end
-    end
-    return false
+    return Compat.KnowsSpellNamed("Vanish")
 end
 
 -- Checks if the player has learned Poisons (the base poison-making skill)
 local function PlayerKnowsPoisons()
-    for i = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(i)
-        for j = offset + 1, offset + numSpells do
-            local spellName = GetSpellBookItemName(j, BOOKTYPE_SPELL)
-            if spellName == "Poisons" then
-                return true
-            end
-        end
-    end
-    return false
+    return Compat.KnowsSpellNamed("Poisons")
 end
 
 -- Counts total poison items in bags
 local function GetTotalPoisonCount()
     local total = 0
     for _, itemID in ipairs(poisonItemIDs) do
-        local count = GetItemCount(itemID)
-        if count then
-            total = total + count
-        end
+        total = total + Compat.GetItemCount(itemID)
     end
     return total
 end
@@ -103,13 +85,7 @@ local function IsDualWielding()
     local offHandID = GetInventoryItemID("player", 17)
     if not offHandID then return false end
     
-    local classID
-    if GetItemInfoInstant then
-        _, _, _, _, _, classID = GetItemInfoInstant(offHandID)
-    else
-        local _, _, _, _, _, cID = GetItemInfo(offHandID)
-        classID = cID
-    end
+    local _, _, _, _, _, classID = Compat.GetItemInfoInstant(offHandID)
 
     if classID == 2 then return true end -- 2 is Enum.ItemClass.Weapon
     return false
@@ -117,7 +93,7 @@ end
 
 -- Gets weapon poison expiration times (returns mhRemaining, ohRemaining in seconds, or nil if no poison)
 local function GetWeaponPoisonInfo()
-    local hasMH, mhExp, _, _, hasOH, ohExp = GetWeaponEnchantInfo()
+    local hasMH, mhExp, hasOH, ohExp = Compat.GetWeaponEnchants()
     -- mhExp/ohExp are in milliseconds
     local mhRemaining = nil
     local ohRemaining = nil
@@ -186,7 +162,7 @@ function RogueReminders.CheckReminders()
                 -- Flash Powder Check (resting, knows Vanish)
                 elseif config.id == "rogue_flash_powder" then
                     if PlayerKnowsVanish() then
-                        local flashCount = GetItemCount(FLASH_POWDER_ID) or 0
+                        local flashCount = Compat.GetItemCount(FLASH_POWDER_ID)
                         local threshold = Prepped:GetRuleThreshold(config.id, 10)
                         if flashCount < threshold then
                             trigger = true

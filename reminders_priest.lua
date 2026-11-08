@@ -1,6 +1,9 @@
 -- reminders_priest.lua
 -- Priest-specific reminders for the Prepped addon
 
+local _, ns = ...
+local Compat = ns.Compat
+
 local PriestReminders = {}
 
 -- Reminder configuration
@@ -26,7 +29,7 @@ local function GetFortitudeNames()
     if fortitudeNames then return fortitudeNames end
     fortitudeNames = {}
     for _, spellID in ipairs(fortitudeSpellIDs) do
-        local spellName = GetSpellInfo(spellID)
+        local spellName = Compat.GetSpellName(spellID)
         if spellName then
             fortitudeNames[spellName] = true
         end
@@ -39,7 +42,7 @@ local function GetPrayerFortitudeNames()
     if prayerFortitudeNames then return prayerFortitudeNames end
     prayerFortitudeNames = {}
     for _, spellID in ipairs(prayerFortitudeSpellIDs) do
-        local spellName = GetSpellInfo(spellID)
+        local spellName = Compat.GetSpellName(spellID)
         if spellName then
             prayerFortitudeNames[spellName] = true
         end
@@ -47,25 +50,11 @@ local function GetPrayerFortitudeNames()
     return prayerFortitudeNames
 end
 
--- Check if a spell with given name is learned
-local function IsSpellLearned(spellName)
-    for i = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(i)
-        for j = offset + 1, offset + numSpells do
-            local spellNameBook = GetSpellBookItemName(j, BOOKTYPE_SPELL)
-            if spellNameBook == spellName then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 -- Check if player knows any rank of Power Word: Fortitude
 local function PlayerKnowsFortitude()
     local names = GetFortitudeNames()
     for name in pairs(names) do
-        if IsSpellLearned(name) then
+        if Compat.KnowsSpellNamed(name) then
             return true
         end
     end
@@ -76,50 +65,16 @@ end
 local function PlayerKnowsPrayerFortitude()
     local names = GetPrayerFortitudeNames()
     for name in pairs(names) do
-        if IsSpellLearned(name) then
+        if Compat.KnowsSpellNamed(name) then
             return true
         end
     end
     return false
 end
 
--- Check if player has Fortitude buff active
-local function PlayerHasFortitude()
-    local names = GetFortitudeNames()
-    local prayerNames = GetPrayerFortitudeNames()
-    
-    for i = 1, 40 do
-        local name = UnitAura("player", i, "HELPFUL")
-        if not name then break end
-        
-        -- Check both regular Fortitude and Prayer of Fortitude
-        if names[name] or prayerNames[name] then
-            return true
-        end
-    end
-    return false
-end
-
--- Get remaining time on Fortitude buff in seconds
-local function GetFortitudeExpiration()
-    local names = GetFortitudeNames()
-    local prayerNames = GetPrayerFortitudeNames()
-    
-    for i = 1, 40 do
-        local name, _, _, _, _, expirationTime = UnitAura("player", i, "HELPFUL")
-        if not name then break end
-        
-        -- Check both regular Fortitude and Prayer of Fortitude
-        if names[name] or prayerNames[name] then
-            if expirationTime and expirationTime > 0 then
-                return expirationTime - GetTime()
-            else
-                -- Permanent buff (shouldn't happen with Fortitude, but handle it)
-                return 999
-            end
-        end
-    end
-    return nil  -- Buff not found
+-- Matches both regular Fortitude and Prayer of Fortitude
+local function IsFortitudeBuff(name)
+    return GetFortitudeNames()[name] or GetPrayerFortitudeNames()[name] or false
 end
 
 -- Main reminder check function
@@ -161,13 +116,13 @@ function PriestReminders.CheckReminders()
                         local knowsFortitude = PlayerKnowsPrayerFortitude() or PlayerKnowsFortitude()
                         
                         if knowsFortitude then
-                            local remaining = GetFortitudeExpiration()
-                            
-                            if not remaining then
+                            local state, remaining = Compat.FindPlayerBuff(IsFortitudeBuff)
+
+                            if state == "missing" then
                                 -- Buff is missing
                                 trigger = true
                                 displayMessage = config.message
-                            elseif Prepped:IsLowEnabled(config.id) then
+                            elseif state == "present" and remaining and Prepped:IsLowEnabled(config.id) then
                                 -- Check if buff is expiring soon
                                 local threshold = Prepped:GetRuleThreshold(config.id, 60)
                                 if remaining <= threshold then
@@ -175,6 +130,7 @@ function PriestReminders.CheckReminders()
                                     displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
                                 end
                             end
+                            -- "unknown": buff data hidden by combat restrictions, don't warn
                         end
                     end
                 end

@@ -1,7 +1,14 @@
+local addonName, ns = ...
+local Compat = ns.Compat
+
 local Prepped = {}
 Prepped.reminderModules = {}
+Prepped.Compat = Compat
 
--- Settings
+local function GetCharacterKey()
+    return (UnitName("player") or "Unknown") .. " - " .. ((GetRealmName and GetRealmName()) or "")
+end
+
 -- Settings
 local function EnsureSettings()
     if not PreppedSettings then PreppedSettings = {} end
@@ -41,8 +48,8 @@ local function EnsureSettings()
     if not PreppedSettings.appearance.bgColor then PreppedSettings.appearance.bgColor = { r = 0, g = 0, b = 0, a = 0.5 } end
 
     if not PreppedSettings.profiles then PreppedSettings.profiles = {} end
-    
-    local charKey = UnitName("player") .. " - " .. GetRealmName()
+
+    local charKey = GetCharacterKey()
     if not PreppedSettings.profiles[charKey] then
         PreppedSettings.profiles[charKey] = {
             enabledRules = {},
@@ -57,8 +64,7 @@ local function GetCurrentProfile()
     if PreppedSettings.useAccountWide then
         return PreppedSettings.global
     else
-        local charKey = UnitName("player") .. " - " .. GetRealmName()
-        return PreppedSettings.profiles[charKey]
+        return PreppedSettings.profiles[GetCharacterKey()]
     end
 end
 
@@ -131,8 +137,7 @@ function Prepped:SetAccountWide(enabled)
 end
 
 function Prepped:ClearCharacterSettings()
-    local charKey = UnitName("player") .. " - " .. GetRealmName()
-    PreppedSettings.profiles[charKey] = {
+    PreppedSettings.profiles[GetCharacterKey()] = {
         enabledRules = {},
         enabledLowRules = {},
         thresholds = {}
@@ -189,6 +194,23 @@ SLASH_PREPPED2 = "/prepped"
 SlashCmdList["PREPPED"] = function(msg)
     if msg == "debug" then
         print("|cff00ff00Prepped Debug:|r")
+        print("  Client: " .. Compat.GetClientLabel())
+        print("  Buff data hidden by combat restrictions: " .. tostring(Compat.AreAurasRestricted()))
+        local trees = Compat.GetTalentTrees()
+        if trees then
+            for i, tree in ipairs(trees) do
+                print(string.format("  Talent tree %d (%s): %d points", i, tostring(tree.name or "?"), tree.points or 0))
+            end
+        else
+            print("  Talent trees: unavailable")
+        end
+        print("  Primary talent tree: " .. tostring(Compat.GetPrimaryTalentTree()))
+        if Compat.lastTalentError then
+            print("  Last talent read error: " .. tostring(Compat.lastTalentError))
+        end
+        if Compat.lastBuffScanError then
+            print("  Last buff scan error: " .. tostring(Compat.lastBuffScanError))
+        end
         print("  GetSpecialization exists: " .. tostring(GetSpecialization ~= nil))
         if GetSpecialization then
             local specIndex = GetSpecialization()
@@ -221,7 +243,8 @@ SlashCmdList["PREPPED"] = function(msg)
     -- 1. Try the Modern 2026 API using our saved category object
     if Prepped.settingsCategory and Settings and Settings.OpenToCategory then
         -- We pass the ID of the category we stored during CreateOptionsPanel
-        Settings.OpenToCategory(Prepped.settingsCategory.ID)
+        local category = Prepped.settingsCategory
+        Settings.OpenToCategory(category.GetID and category:GetID() or category.ID)
         return
     end
 
@@ -243,19 +266,27 @@ function Prepped:RegisterReminderModule(module)
     table.insert(self.reminderModules, module)
 end
 
+local RANGED_SLOT = INVSLOT_RANGED or 18
+local AMMO_SLOT = INVSLOT_AMMO or 0
+local ITEM_CLASS_WEAPON = (Enum.ItemClass and Enum.ItemClass.Weapon) or 2
+local WEAPON_SUBCLASS_THROWN = (Enum.ItemWeaponSubclass and Enum.ItemWeaponSubclass.Thrown) or 16
+
+-- Returns the ammo (or thrown weapon) count, or nil when there is no ranged
+-- weapon that uses ammo.
 function Prepped:GetAmmoCount()
-    local itemID = GetInventoryItemID("player", 18) -- Ranged Slot
+    local itemID = GetInventoryItemID("player", RANGED_SLOT)
     if not itemID then return nil end
-    
-    local _, _, _, _, _, _, _, _, _, _, _, itemClassID, itemSubClassID = GetItemInfo(itemID)
-    
-    -- 4 is Weapon, 16 is Thrown
-    if itemClassID == 4 and itemSubClassID == 16 then
-        return GetInventoryItemCount("player", 18)
+
+    local _, _, _, _, _, itemClassID, itemSubClassID = Compat.GetItemInfoInstant(itemID)
+    if itemClassID == ITEM_CLASS_WEAPON and itemSubClassID == WEAPON_SUBCLASS_THROWN then
+        -- Vanilla-style thrown weapons (Forever) are stacks that get used up.
+        -- TBC-style thrown weapons have durability instead and never run out.
+        local _, maxDurability = GetInventoryItemDurability(RANGED_SLOT)
+        if maxDurability and maxDurability > 0 then return nil end
+        return GetInventoryItemCount("player", RANGED_SLOT)
     end
-    
-    -- Slot 0 is INVSLOT_AMMO
-    return GetInventoryItemCount("player", 0)
+
+    return GetInventoryItemCount("player", AMMO_SLOT)
 end
 
 Prepped.displayLines = {}
@@ -336,6 +367,8 @@ function Prepped:ResetReminders()
     end
 end
 
+local reportedErrors = {}
+
 function Prepped:CheckReminders()
     self:ResetReminders()
     
@@ -346,15 +379,25 @@ function Prepped:CheckReminders()
 
     for _, module in ipairs(self.reminderModules) do
         if module.CheckReminders then
-            module.CheckReminders()
+            -- One failing module must not take the others down, and a repeating
+            -- error is only reported once instead of on every update.
+            local ok, err = pcall(module.CheckReminders)
+            if not ok and not reportedErrors[err] then
+                reportedErrors[err] = true
+                geterrorhandler()(err)
+            end
         end
     end
 end
 
+local function GetAddonVersion()
+    local getMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+    return (getMetadata and getMetadata(addonName, "Version")) or "?"
+end
 
 function Prepped:ShowWelcomeMessage()
     if not self:IsRuleEnabled("general_welcome") then return end
-    print("|cff00ff00Prepped|r |cffffcc00v1.7.1|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
+    print("|cff00ff00Prepped|r |cffffcc00v" .. GetAddonVersion() .. "|r |cff00ff00 loaded!|r. Type |cffffff00/prepped|r to open the options menu.")
 end
 
 -- List of all rule IDs and labels for the options menu
@@ -406,6 +449,40 @@ Prepped.AllRules = {
 
     -- Add more here as you add rules
 }
+
+-- Color picker: current clients (TBC Anniversary and Forever) use
+-- SetupColorPickerAndShow/swatchFunc; the old field-based setup is kept as a fallback.
+local function GetPickerAlpha()
+    if ColorPickerFrame.GetColorAlpha then
+        return ColorPickerFrame:GetColorAlpha()
+    elseif OpacitySliderFrame then
+        return 1 - OpacitySliderFrame:GetValue()
+    end
+    return 1
+end
+
+local function OpenColorPicker(color, hasOpacity, onChange, onCancel)
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = color.r, g = color.g, b = color.b,
+            opacity = color.a or 1,
+            hasOpacity = hasOpacity,
+            swatchFunc = onChange,
+            opacityFunc = onChange,
+            cancelFunc = onCancel,
+        })
+    else
+        ColorPickerFrame.func = onChange
+        ColorPickerFrame.swatchFunc = onChange
+        ColorPickerFrame.opacityFunc = onChange
+        ColorPickerFrame.cancelFunc = onCancel
+        ColorPickerFrame.hasOpacity = hasOpacity
+        ColorPickerFrame.opacity = 1 - (color.a or 1)
+        ColorPickerFrame:SetColorRGB(color.r, color.g, color.b)
+        ColorPickerFrame:Hide() -- Toggle refresh
+        ColorPickerFrame:Show()
+    end
+end
 
 -- Options panel for Blizzard Interface Options
 local function CreateOptionsPanel()
@@ -745,47 +822,34 @@ local function CreateOptionsPanel()
             lbl:SetText(labelText)
             
             table.insert(panel.colorButtons, btn)
-            
+
             btn:SetScript("OnClick", function()
-                local curApp = Prepped:GetAppearance()
-                local c = curApp[colorKey]
-                
-                local r_old, g_old, b_old, a_old = c.r, c.g, c.b, (c.a or 1)
+                local c = Prepped:GetAppearance()[colorKey]
+                local hasOpacity = (c.a ~= nil)
+                local old = { r = c.r, g = c.g, b = c.b, a = c.a }
+
+                local function ApplyColor(r, g, b, a)
+                    local color = Prepped:GetAppearance()[colorKey]
+                    color.r, color.g, color.b = r, g, b
+                    if color.a ~= nil and a ~= nil then color.a = a end
+                    if btn.swatch then
+                        btn.swatch:SetColorTexture(r, g, b, color.a or 1)
+                    end
+                    Prepped:ApplyAppearance()
+                end
 
                 local function OnColorChanged()
+                    -- The picker also fires this while it is being set up; ignore that.
+                    if not ColorPickerFrame:IsShown() then return end
                     local r, g, b = ColorPickerFrame:GetColorRGB()
-                    local a = 1
-                    if ColorPickerFrame.hasOpacity then
-                        a = 1 - OpacitySliderFrame:GetValue()
-                    end
-                    
-                    local app = Prepped:GetAppearance()
-                    app[colorKey].r, app[colorKey].g, app[colorKey].b = r, g, b
-                    if app[colorKey].a ~= nil then app[colorKey].a = a end
-                    
-                    if btn.swatch then
-                        btn.swatch:SetColorTexture(r, g, b, a)
-                    end
-                    Prepped:ApplyAppearance()
+                    ApplyColor(r, g, b, hasOpacity and GetPickerAlpha() or nil)
                 end
 
-                ColorPickerFrame.func = OnColorChanged
-                ColorPickerFrame.opacityFunc = OnColorChanged
-                ColorPickerFrame.hasOpacity = (c.a ~= nil)
-                ColorPickerFrame.opacity = 1 - (c.a or 1)
-                ColorPickerFrame:SetColorRGB(c.r, c.g, c.b)
-                
-                ColorPickerFrame.cancelFunc = function()
-                    local app = Prepped:GetAppearance()
-                    app[colorKey].r, app[colorKey].g, app[colorKey].b, app[colorKey].a = r_old, g_old, b_old, a_old
-                    if btn.swatch then
-                        btn.swatch:SetColorTexture(r_old, g_old, b_old, a_old)
-                    end
-                    Prepped:ApplyAppearance()
+                local function OnCancel()
+                    ApplyColor(old.r, old.g, old.b, old.a)
                 end
-                
-                ColorPickerFrame:Hide() -- Toggle refresh
-                ColorPickerFrame:Show()
+
+                OpenColorPicker(c, hasOpacity, OnColorChanged, OnCancel)
             end)
             return btn
         end
@@ -981,32 +1045,56 @@ function Prepped:InitializeDefaults()
 end
 
 local container = CreateFrame("Frame")
-container:RegisterEvent("PLAYER_ENTERING_WORLD")
-container:RegisterEvent("ADDON_LOADED")
-container:RegisterEvent("BAG_UPDATE")
-container:RegisterEvent("PLAYER_UPDATE_RESTING")
-container:RegisterEvent("UNIT_INVENTORY_CHANGED")
-container:RegisterEvent("UNIT_AURA")
-container:RegisterEvent("SPELLS_CHANGED")
-container:RegisterEvent("UNIT_PET")
-container:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
-container:RegisterEvent("UNIT_HAPPINESS")
-container:RegisterEvent("UNIT_HEALTH")
-container:RegisterEvent("PET_UI_UPDATE")
-container:RegisterEvent("UNIT_STATS")
-container:RegisterEvent("PLAYER_ALIVE")
-container:RegisterEvent("PLAYER_DEAD")
-container:RegisterEvent("PLAYER_UNGHOST")
-container:RegisterEvent("PLAYER_CONTROL_LOST")
-container:RegisterEvent("PLAYER_CONTROL_GAINED")
-container:RegisterEvent("PLAYER_REGEN_DISABLED")
-container:RegisterEvent("PLAYER_REGEN_ENABLED")
-container:RegisterEvent("PLAYER_TALENT_UPDATE")
+for _, event in ipairs({
+    "PLAYER_ENTERING_WORLD",
+    "ADDON_LOADED",
+    "BAG_UPDATE",
+    "PLAYER_UPDATE_RESTING",
+    "SPELLS_CHANGED",
+    "PLAYER_MOUNT_DISPLAY_CHANGED",
+    "PET_UI_UPDATE",
+    "PLAYER_ALIVE",
+    "PLAYER_DEAD",
+    "PLAYER_UNGHOST",
+    "PLAYER_CONTROL_LOST",
+    "PLAYER_CONTROL_GAINED",
+    "PLAYER_REGEN_DISABLED",
+    "PLAYER_REGEN_ENABLED",
+    "PLAYER_TALENT_UPDATE",
+    -- Spell/talent changes; some of these only exist on one client.
+    "LEARNED_SPELL_IN_SKILL_LINE",
+    "CHARACTER_POINTS_CHANGED",
+    "ACTIVE_TALENT_GROUP_CHANGED",
+    "TRAIT_CONFIG_UPDATED",
+}) do
+    Compat.RegisterEvent(container, event)
+end
+-- Unit events only for the units we care about (avoids firing for every nameplate/raid member).
+Compat.RegisterUnitEvent(container, "UNIT_INVENTORY_CHANGED", "player")
+Compat.RegisterUnitEvent(container, "UNIT_AURA", "player")
+Compat.RegisterUnitEvent(container, "UNIT_STATS", "player")
+Compat.RegisterUnitEvent(container, "UNIT_PET", "player")
+Compat.RegisterUnitEvent(container, "UNIT_HEALTH", "player", "pet")
+Compat.RegisterUnitEvent(container, "UNIT_HAPPINESS", "pet")
+
+local cacheInvalidatingEvents = {
+    PLAYER_ENTERING_WORLD = true,
+    SPELLS_CHANGED = true,
+    LEARNED_SPELL_IN_SKILL_LINE = true,
+    PLAYER_TALENT_UPDATE = true,
+    CHARACTER_POINTS_CHANGED = true,
+    ACTIVE_TALENT_GROUP_CHANGED = true,
+    TRAIT_CONFIG_UPDATED = true,
+}
 
 container:SetScript("OnEvent", function(self, event, ...)
+    if cacheInvalidatingEvents[event] then
+        Compat.InvalidateCaches()
+    end
+
     if event == "ADDON_LOADED" then
-        local addonName = ...
-        if addonName == "Prepped" then
+        local loadedAddon = ...
+        if loadedAddon == addonName then
             Prepped:InitializeDefaults()
         end
     elseif event == "PLAYER_ENTERING_WORLD" then

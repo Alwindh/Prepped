@@ -1,4 +1,7 @@
 -- Hunter-specific reminders module
+local _, ns = ...
+local Compat = ns.Compat
+
 local HunterReminders = {}
 
 local hunterReminders = {
@@ -66,82 +69,89 @@ local DietKeywords = {
 }
 
 
+-- Fallback for clients without C_PetInfo.CanPetEatItem (TBC): read the diet
+-- from the item tooltip, then from keywords in the item name.
+local function ItemMatchesDiet(bag, slot, itemID, activeDiets)
+    local itemName, _, _, _, _, _, _, _, _, _, _, itemClassID, itemSubClassID = Compat.GetItemInfo(itemID)
+
+    -- Cache priming: if info isn't here yet, request it and move on
+    if not itemClassID then
+        return false
+    end
+
+    local lowerName = itemName:lower()
+
+    -- 1. THE SKULL FILTER:
+    -- Consumable (0) + Generic (0) is almost always a non-food "Use" item.
+    if itemClassID == 0 and itemSubClassID == 0 then
+        return false
+    end
+
+    -- 2. TOOLTIP SCAN (The primary source)
+    scanner:SetOwner(WorldFrame, "ANCHOR_NONE")
+    scanner:ClearLines()
+    scanner:SetBagItem(bag, slot)
+
+    for i = 2, 6 do
+        local line = _G["PreppedScannerTextLeft"..i]
+        local text = line and line:GetText()
+        if text and text ~= "" then
+            local lowerText = text:lower()
+            -- Ignore action/level lines
+            if not (lowerText:find("use:") or lowerText:find("requires") or lowerText:find("level")) then
+                for diet, _ in pairs(activeDiets) do
+                    if lowerText:find("%f[%a]"..diet:lower().."%f[%A]") then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3. KEYWORD FALLBACK (The Mackerel Fix)
+    -- If tooltip failed, check if the Name contains any diet keywords.
+    -- We only do this for Trade Goods (7) and Food (0,5).
+    if itemClassID == 7 or (itemClassID == 0 and itemSubClassID == 5) then
+        for diet, _ in pairs(activeDiets) do
+            local keywords = DietKeywords[diet]
+            if keywords then
+                for _, kw in ipairs(keywords) do
+                    if lowerName:find(kw) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 local function GetPetFoodCount()
     if not UnitExists("pet") then return nil end
-    
-    local foodTypes = { GetPetFoodTypes() }
+
+    local foodTypes = Compat.GetPetFoodTypes()
     if #foodTypes == 0 then return nil end
-    
+
     local activeDiets = {}
     for _, diet in ipairs(foodTypes) do
         activeDiets[diet] = true
     end
-    
+
     local count = 0
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-            
+
             if info and info.itemID then
-                local itemName, _, _, _, _, _, _, _, _, _, _, itemClassID, itemSubClassID = GetItemInfo(info.itemID)
-                
-                -- Cache priming: if info isn't here yet, request it and move on
-                if not itemClassID then
-                    GetItemInfo(info.itemID)
-                else
-                    local foundMatch = false
-                    local lowerName = itemName:lower()
-
-                    -- 1. THE SKULL FILTER:
-                    -- Consumable (0) + Generic (0) is almost always a non-food "Use" item.
-                    if not (itemClassID == 0 and itemSubClassID == 0) then
-                        
-                        -- 2. TOOLTIP SCAN (The primary source)
-                        scanner:SetOwner(WorldFrame, "ANCHOR_NONE")
-                        scanner:ClearLines()
-                        scanner:SetBagItem(bag, slot)
-                        
-                        for i = 2, 6 do
-                            local line = _G["PreppedScannerTextLeft"..i]
-                            local text = line and line:GetText()
-                            if text and text ~= "" then
-                                local lowerText = text:lower()
-                                -- Ignore action/level lines
-                                if not (lowerText:find("use:") or lowerText:find("requires") or lowerText:find("level")) then
-                                    for diet, _ in pairs(activeDiets) do
-                                        if lowerText:find("%f[%a]"..diet:lower().."%f[%A]") then
-                                            foundMatch = true
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-                            if foundMatch then break end
-                        end
-
-                        -- 3. KEYWORD FALLBACK (The Mackerel Fix)
-                        -- If tooltip failed, check if the Name contains any diet keywords.
-                        -- We only do this for Trade Goods (7) and Food (0,5).
-                        if not foundMatch and (itemClassID == 7 or (itemClassID == 0 and itemSubClassID == 5)) then
-                            for diet, _ in pairs(activeDiets) do
-                                local keywords = DietKeywords[diet]
-                                if keywords then
-                                    for _, kw in ipairs(keywords) do
-                                        if lowerName:find(kw) then
-                                            foundMatch = true
-                                            break
-                                        end
-                                    end
-                                end
-                                if foundMatch then break end
-                            end
-                        end
-                    end
-
-                    if foundMatch then
-                        count = count + (info.stackCount or 1)
-                    end
+                -- Forever can answer directly; TBC needs the tooltip/keyword heuristics.
+                local canEat = Compat.CanPetEatItem(info.itemID)
+                if canEat == nil then
+                    canEat = ItemMatchesDiet(bag, slot, info.itemID, activeDiets)
+                end
+                if canEat then
+                    count = count + (info.stackCount or 1)
                 end
             end
         end
@@ -149,13 +159,14 @@ local function GetPetFoodCount()
     return count
 end
 
-local function PlayerHasBuffFromList(buffList)
-    for i = 1, 40 do
-        local _, _, _, _, _, _, _, _, _, spellID = UnitAura("player", i, "HELPFUL")
-        if not spellID then break end
-        for _, bID in pairs(buffList) do if bID == spellID then return true end end
+local buffMatchers = {}
+local function GetBuffMatcher(config)
+    local matcher = buffMatchers[config.id]
+    if not matcher then
+        matcher = Compat.SpellIDOrNameIn(config.missingBuffs)
+        buffMatchers[config.id] = matcher
     end
-    return false
+    return matcher
 end
 
 function HunterReminders.CheckReminders()
@@ -221,7 +232,7 @@ function HunterReminders.CheckReminders()
                 if config.id == "hunter_aspect" then
                     local learnedAny = false
                     for _, sID in ipairs(config.missingBuffs) do
-                        if IsPlayerSpell(sID) then
+                        if Compat.KnowsSpellID(sID) then
                             learnedAny = true
                             break
                         end
@@ -231,26 +242,27 @@ function HunterReminders.CheckReminders()
                     if trigger and config.isMountedOnly and IsMounted() then trigger = false end
                 end
 
-                if trigger and PlayerHasBuffFromList(config.missingBuffs) then trigger = false end
+                -- "present" or "unknown" (buff data hidden in combat): no warning
+                if trigger and Compat.FindPlayerBuff(GetBuffMatcher(config)) ~= "missing" then trigger = false end
             end
-            
+
             -- Pet Logic
             if trigger and config.petCheck then
                 if IsMounted() then
                     trigger = false
-                elseif not IsPlayerSpell(1515) then -- Tame Beast
+                elseif not Compat.KnowsSpellID(1515) then -- Tame Beast
                     trigger = false
                 elseif UnitExists("pet") and not UnitIsDead("pet") then
                     trigger = false
                 end
             end
-            
+
             -- Happiness Logic
             if trigger and config.petHappinessCheck then
                 if UnitExists("pet") then
-                    local happiness = GetPetHappiness()
-                    -- happiness: 1 = unhappy, 2 = content, 3 = happy
-                    if happiness == 3 then
+                    local happiness = Compat.GetPetHappiness()
+                    -- happiness: 1 = unhappy, 2 = content, 3 = happy (nil = not available)
+                    if happiness == nil or happiness == 3 then
                         trigger = false
                     end
                 else
