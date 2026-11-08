@@ -199,6 +199,8 @@ function Prepped:PrintDebugReport()
 
     if classToken == "ROGUE" then
         DebugLine("Poisons skill rank: %d, Poisons spell known: %s", API.GetSkillRank(40), tostring(C_SpellBook.IsSpellKnown(2842)))
+    elseif classToken == "DRUID" then
+        DebugLine("Shapeshift form ID: %s", tostring(GetShapeshiftFormID()))
     end
 
     local hasPerk, source = API.HasReagentEconomy()
@@ -349,6 +351,45 @@ function Prepped:ResetReminders()
     end
 end
 
+function Prepped:ShowReminder(text)
+    local line = self:GetNextLine()
+    if line then
+        line.text:SetText(text)
+        line:Show()
+    end
+end
+
+-- Missing / expiring check for a self-buff rule with a "Warn when expiring" option.
+-- Returns the text to show, or nil. Hidden buff data ("unknown") never warns.
+function Prepped:CheckTimedBuff(ruleId, matcher, missingText, expiringFormat)
+    local state, remaining = API.FindPlayerBuff(matcher)
+    if state == "missing" then
+        return missingText
+    elseif state == "present" and remaining and self:IsLowEnabled(ruleId)
+        and remaining <= self:GetRuleThreshold(ruleId) then
+        return string.format(expiringFormat, math.max(0, math.floor(remaining)))
+    end
+    return nil
+end
+
+-- Runs a module's reminders. Each entry is { id = ruleId, [mustRest | mustNotRest | outOfCombat] = true, ... };
+-- checks[id](entry) returns the text to show, or nil.
+function Prepped:RunReminders(reminders, checks)
+    local isResting = IsResting()
+    local inCombat = UnitAffectingCombat("player") or InCombatLockdown()
+    for _, config in ipairs(reminders) do
+        if self:IsRuleEnabled(config.id)
+            and not (config.mustRest and not isResting)
+            and not (config.mustNotRest and isResting)
+            and not (config.outOfCombat and inCombat) then
+            local text = checks[config.id](config)
+            if text then
+                self:ShowReminder(text)
+            end
+        end
+    end
+end
+
 local reportedErrors = {}
 
 function Prepped:CheckReminders()
@@ -420,6 +461,7 @@ Prepped.AllRules = {
     { id = "rogue_weapon_poison", label = "Missing Weapon Poison", group = "Rogue", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to apply poison to your weapons when you have poisons in your bags." },
     { id = "rogue_poison_stock", label = "Low Poison Stock", group = "Rogue", defaultThreshold = 20, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when your total poison count drops below this." },
     { id = "rogue_flash_powder", label = "Low Flash Powder", group = "Rogue", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Flash Powder count drops below this (for Vanish)." },
+    { id = "rogue_blinding_powder", label = "Low Blinding Powder", group = "Rogue", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Blinding Powder count drops below this (for Blind). It isn't a vendor reagent, so Reagent Economy doesn't hide it." },
 
     { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
     { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 }, description = "Show a warning while resting when your ammo/thrown count drops below this." },
@@ -434,6 +476,19 @@ Prepped.AllRules = {
     { id = "paladin_righteous_fury", label = "Missing Righteous Fury", group = "Paladin", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec." },
 
     { id = "priest_fortitude", label = "Missing Power Word: Fortitude", group = "Priest", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with Power Word: Fortitude (or Prayer of Fortitude if learned). Warns when missing or expiring soon." },
+    { id = "priest_inner_fire", label = "Missing Inner Fire", group = "Priest", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to have Inner Fire active when not resting." },
+    { id = "priest_candles", label = "Low Candles", group = "Priest", defaultThreshold = 10, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have fewer candles than this for your Prayer spells: Sacred Candles once you know Prayer of Fortitude rank 2, Prayer of Spirit or Prayer of Shadow Protection, Holy Candles before that." },
+
+    { id = "druid_mark", label = "Missing Mark of the Wild", group = "Druid", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with Mark of the Wild (or Gift of the Wild) when not resting or traveling." },
+    { id = "druid_rebirth_seeds", label = "Low Rebirth Seeds", group = "Druid", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when you have fewer seeds for your highest Rebirth rank than this." },
+    { id = "druid_gift_reagents", label = "Low Gift of the Wild Reagents", group = "Druid", defaultThreshold = 10, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have fewer reagents for your Gift of the Wild rank (Wild Berries or Wild Thornroot) than this." },
+
+    { id = "warlock_armor", label = "Missing Demon Armor", group = "Warlock", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to have Demon Armor (or Demon Skin) active when not resting." },
+    { id = "warlock_pet", label = "Missing Demon", group = "Warlock", description = "Reminds you to summon a demon when not resting (not while you have a Demonic Sacrifice buff)." },
+    { id = "warlock_weapon_stone", label = "Missing Weapon Stone", group = "Warlock", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to put a Firestone or Spellstone on your weapon once you can create one (weapon imbues in Forever; a wizard oil doesn't count)." },
+    { id = "warlock_healthstone", label = "Missing Healthstone", group = "Warlock", description = "Reminds you to create a Healthstone when you are out of combat, not resting, and have a Soul Shard." },
+    { id = "warlock_soulstone", label = "Missing Soulstone", group = "Warlock", description = "Reminds you to create a Soulstone when you are out of combat, not resting, have a Soul Shard and aren't soulstoned yourself." },
+    { id = "warlock_soul_shards", label = "Low Soul Shards", group = "Warlock", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning out of combat, when not resting, while you have fewer Soul Shards than this." },
 }
 
 function Prepped:InitializeDefaults()

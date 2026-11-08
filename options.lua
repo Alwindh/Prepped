@@ -9,7 +9,7 @@ local Options = {}
 ns.Options = Options
 
 local PREFIX = "PREPPED_"
-local CLASS_PAGES = { "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warrior" }
+local CLASS_PAGES = { "Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior" }
 
 local proxies = {}
 

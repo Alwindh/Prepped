@@ -5,6 +5,7 @@ local API = ns.API
 local RogueReminders = {}
 
 local VANISH = API.SpellFamily("Vanish", { 1856, 1857 }, { class = "ROGUE" })
+local BLIND = API.SpellFamily("Blind", { 2094 }, { class = "ROGUE" })
 -- Poisons is a secondary skill in Forever (skill line 40), not a spellbook spell.
 local POISONS = API.SpellFamily("Poisons", { 2842 }, { class = "ROGUE" })
 local POISONS_SKILL_LINE = 40
@@ -32,6 +33,11 @@ local rogueReminders = {
         mustRest = true,
     },
     {
+        id = "rogue_blinding_powder",
+        message = "Low on Blinding Powder (%s left)",
+        mustRest = true,
+    },
+    {
         id = "rogue_poison_stock",
         message = "Low on Poison (%s total)",
         mustRest = true,
@@ -44,8 +50,10 @@ local rogueReminders = {
     },
 }
 
--- Flash Powder item ID
+-- Flash Powder item ID (vendor reagent)
 local FLASH_POWDER_ID = 5140
+-- Blinding Powder item ID (made with Poisons, not sold by vendors)
+local BLINDING_POWDER_ID = 5530
 
 -- Poison item IDs (all ranks of each poison type)
 local poisonItemIDs = {
@@ -174,6 +182,17 @@ function RogueReminders.CheckReminders()
                         if flashCount < threshold then
                             trigger = true
                             displayMessage = string.format(config.message, flashCount)
+                        end
+                    end
+
+                -- Blinding Powder Check (resting, knows Blind). Not a vendor
+                -- reagent, so Reagent Economy doesn't remove it.
+                elseif config.id == "rogue_blinding_powder" then
+                    if API.KnowsFamily(BLIND) then
+                        local powderCount = C_Item.GetItemCount(BLINDING_POWDER_ID)
+                        if powderCount < Prepped:GetRuleThreshold(config.id) then
+                            trigger = true
+                            displayMessage = string.format(config.message, powderCount)
                         end
                     end
 

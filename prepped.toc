@@ -2,7 +2,7 @@
 ## Title: Prepped
 ## Notes: Simple reminders for chores (Reagents, buffs, repairs)
 ## Author: Excessive
-## Version: 1.10.0
+## Version: 2.0.0
 ## IconTexture: Interface\Icons\INV_Misc_Bag_08
 ## Category: Reminders
 ## AddonCompartmentFunc: Prepped_OpenOptions
@@ -22,3 +22,5 @@ reminders_rogue.lua
 reminders_warrior.lua
 reminders_paladin.lua
 reminders_priest.lua
+reminders_druid.lua
+reminders_warlock.lua
