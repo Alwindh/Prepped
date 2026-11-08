@@ -4,6 +4,9 @@ local Compat = ns.Compat
 local Prepped = {}
 Prepped.reminderModules = {}
 Prepped.Compat = Compat
+-- Publish right away: the reminder modules register through this global, and
+-- they must not depend on everything below loading successfully.
+_G.Prepped = Prepped
 
 local function GetCharacterKey()
     return (UnitName("player") or "Unknown") .. " - " .. ((GetRealmName and GetRealmName()) or "")
@@ -527,7 +530,9 @@ local function CreateOptionsPanel()
     panel.tabs = {}
     panel.pages = {}
     
-    local tabTemplate = "OptionsFrameTabButtonTemplate" 
+    -- Forever's PanelTemplates_* functions need the tab's Left/LeftActive/Text keys,
+    -- which only the current tab templates provide (OptionsFrameTabButtonTemplate errors).
+    local tabTemplate = "PanelTopTabButtonTemplate"
     
     local function SelectGroup(id)
         PanelTemplates_SetTab(panel, id)
@@ -552,7 +557,7 @@ local function CreateOptionsPanel()
              -- Anchor to ContentBox to ensure they stay attached visually
              tab:SetPoint("BOTTOMLEFT", contentBox, "TOPLEFT", 6, -2) 
         else
-             tab:SetPoint("TOPLEFT", panel.tabs[i-1], "TOPRIGHT", -14, 0)
+             tab:SetPoint("TOPLEFT", panel.tabs[i-1], "TOPRIGHT", 3, 0)
         end
         
         table.insert(panel.tabs, tab)
@@ -1020,7 +1025,13 @@ local function CreateOptionsPanel()
     end
 end
 
-CreateOptionsPanel()
+-- A problem in the options UI must never stop the reminders from running.
+do
+    local ok, err = pcall(CreateOptionsPanel)
+    if not ok then
+        geterrorhandler()(err)
+    end
+end
 
 function Prepped:InitializeDefaults()
     EnsureSettings()

@@ -1,8 +1,6 @@
 # Prepped
 
-**Prepped** is a modular, "set-it-and-forget-it" reminder addon for **WoW Forever** and **TBC Anniversary**. It helps you avoid common mistakes—like walking into a dungeon without water or pulling a boss without your pet—by providing clear, non-intrusive, and highly configurable alerts.
-
-One download works on both clients (interface `16001` for Forever, `20505`/`20506` for TBC Anniversary).
+**Prepped** is a modular, "set-it-and-forget-it" reminder addon for **WoW Forever** (interface `16001`). It helps you avoid common mistakes—like walking into a dungeon without water or pulling a boss without your pet—by providing clear, non-intrusive, and highly configurable alerts.
 
 ---
 
@@ -105,9 +103,7 @@ Personalize the alerts to match your UI:
 ## Installation
 
 1. Download the latest release.
-2. Extract the folder into your AddOns directory:
-   - WoW Forever: `World of Warcraft/_forever_/Interface/AddOns/`
-   - TBC Anniversary: `World of Warcraft/_anniversary_/Interface/AddOns/`
+2. Extract the folder into `World of Warcraft/_forever_/Interface/AddOns/`.
 3. Ensure the folder is named exactly `Prepped`.
 4. (Optional) Install via **CurseForge** or **WowUP** for automatic updates.
 
