@@ -317,6 +317,18 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("leveling: food reminder in Cat Form", { class = "DRUID", level = 30, form = 1, buffs = {} },
         { "Missing food buff (Well Fed)" })
 
+    -- Everyone: Camp Benefits while leveling (same conditions as the food buff)
+    R("leveling: no Camp Benefits", { class = "WARRIOR", level = 30, buffs = { { spellId = 1248406, expires = NOW + 900 } } },
+        { "Missing Camp Benefits" }, { "Missing food buff (Well Fed)" })
+    R("leveling: Camp Benefits up", { class = "WARRIOR", level = 30, buffs = { { spellId = 1229741, expires = NOW + 3000 } } },
+        { "Missing food buff (Well Fed)" }, { "Missing Camp Benefits", "Camp Benefits expiring (3000s left)" })
+    R("leveling: Camp Benefits expiring (5 min warning)", { class = "WARRIOR", level = 30, buffs = { { spellId = 1229741, expires = NOW + 200 } } },
+        { "Camp Benefits expiring (200s left)" })
+    R("leveling: no camp reminder while resting", { class = "WARRIOR", level = 30, resting = true, buffs = {} }, {}, { "Missing Camp Benefits" })
+    R("leveling: no camp reminder in combat", { class = "WARRIOR", level = 30, inCombat = true, buffs = {} }, {}, { "Missing Camp Benefits" })
+    R("leveling: no camp reminder while mounted", { class = "WARRIOR", level = 30, mounted = true, buffs = {} }, {}, { "Missing Camp Benefits" })
+    R("max level: no camp reminder", { class = "WARRIOR", level = 60, buffs = {} }, {}, { "Missing Camp Benefits" })
+
     -- Everyone
     R("mana user: low water (incl. reagent bag) + repair", { class = "PRIEST", spells = {}, resting = true, level = 40,
         bags = { { bag = 0, slot = 1, itemID = 159, count = 5 }, { bag = 5, slot = 2, itemID = 159, count = 2 } }, equipped = { [1] = 2131 }, headDurability = 40 },

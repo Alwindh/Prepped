@@ -171,6 +171,7 @@ local function BuildGeneralPage(category, layout)
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Leveling"))
     AddRule(category, layout, Prepped:GetRule("general_food"))
+    AddRule(category, layout, Prepped:GetRule("general_camp"))
 
     layout:AddInitializer(CreateSettingsButtonInitializer("Reset All Settings", RESET,
         function() StaticPopup_Show("PREPPED_RESET_ALL_SETTINGS") end,
