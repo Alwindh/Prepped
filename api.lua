@@ -348,6 +348,31 @@ function API.IsTraveling()
     return formID ~= nil and TRAVEL_FORMS[formID] == true
 end
 
+------------------------------------------------------------------------
+-- Group chat
+------------------------------------------------------------------------
+-- True while Forever blocks chat messages from add-ons (combat restrictions).
+function API.InChatLockdown()
+    local ok, locked = pcall(C_ChatInfo.InChatMessagingLockdown)
+    return ok and locked == true
+end
+
+-- Chat type that reaches your whole group, or nil when you're not in one.
+function API.GroupChatType()
+    if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then return "INSTANCE_CHAT" end
+    if IsInRaid() then return "RAID" end
+    if IsInGroup() then return "PARTY" end
+    return nil
+end
+
+-- Posts one line in group chat. Returns true when it was sent.
+function API.SendGroupMessage(message)
+    local chatType = API.GroupChatType()
+    if not chatType then return false end
+    local ok = pcall(C_ChatInfo.SendChatMessage, message, chatType)
+    return ok
+end
+
 -- "Name id" for each buff on you, for /prepped debug (nil while buffs are hidden).
 function API.ListPlayerBuffs()
     if API.AreAurasRestricted() then return nil end

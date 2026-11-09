@@ -122,7 +122,7 @@ function checks.warlock_soul_shards(config)
     if not KnowsAny(CREATE_HEALTHSTONE, CREATE_SOULSTONE) then return nil end
     local shards = SoulShardCount()
     if shards < Prepped:GetRuleThreshold(config.id) then
-        return string.format(config.message, shards)
+        return string.format(config.message, shards), shards
     end
     return nil
 end

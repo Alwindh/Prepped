@@ -91,7 +91,8 @@ function HunterReminders.CheckReminders()
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
-            if config.mustRest and not isResting then trigger = false end
+            local value -- amount for the group message (Prepped:BuildGroupMessage)
+            if config.mustRest and not Prepped:IsSupplyTime() then trigger = false end
             if config.mustNotRest and isResting then trigger = false end
 
             -- If we already showed a "No Ammo" or "Critical" warning, skip "Low"
@@ -124,6 +125,7 @@ function HunterReminders.CheckReminders()
                         end
                     end
                     displayMessage = string.format(config.message, ammoCount)
+                    value = ammoCount
                 end
             end
 
@@ -184,16 +186,13 @@ function HunterReminders.CheckReminders()
                         trigger = false
                     else
                         displayMessage = string.format(config.message, count or 0)
+                        value = count
                     end
                 end
             end
 
             if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
+                Prepped:ShowReminder(displayMessage, config.id, value)
             end
         end
     end

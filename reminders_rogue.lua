@@ -136,10 +136,11 @@ function RogueReminders.CheckReminders()
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = false
             local displayMessage = config.message
+            local value -- amount for the group message (Prepped:BuildGroupMessage)
             
             -- Basic filters
             local filterPassed = true
-            if config.mustRest and not isResting then filterPassed = false end
+            if config.mustRest and not Prepped:IsSupplyTime() then filterPassed = false end
             if config.mustNotRest and isResting then filterPassed = false end
             
             -- If we already showed a "No Ammo" or "Critical" warning, skip "Low"
@@ -164,6 +165,7 @@ function RogueReminders.CheckReminders()
                             end
                         end
                         displayMessage = string.format(config.message, count)
+                        value = count
                     end
 
                 -- No Ammo Check
@@ -182,6 +184,7 @@ function RogueReminders.CheckReminders()
                         if flashCount < threshold then
                             trigger = true
                             displayMessage = string.format(config.message, flashCount)
+                            value = flashCount
                         end
                     end
 
@@ -193,6 +196,7 @@ function RogueReminders.CheckReminders()
                         if powderCount < Prepped:GetRuleThreshold(config.id) then
                             trigger = true
                             displayMessage = string.format(config.message, powderCount)
+                            value = powderCount
                         end
                     end
 
@@ -204,6 +208,7 @@ function RogueReminders.CheckReminders()
                         if poisonCount < threshold then
                             trigger = true
                             displayMessage = string.format(config.message, poisonCount)
+                            value = poisonCount
                         end
                     end
 
@@ -257,11 +262,7 @@ function RogueReminders.CheckReminders()
             end
             
             if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
+                Prepped:ShowReminder(displayMessage, config.id, value)
             end
         end
     end

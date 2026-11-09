@@ -227,6 +227,7 @@ function Prepped:PrintDebugReport()
     DebugLine("Unknown spell IDs: %s", #unresolved > 0 and table.concat(unresolved, ", ") or "none")
     local unlisted = API.GetUnlistedNameMatches(classToken)
     DebugLine("Recognised by name, ID not listed: %s", #unlisted > 0 and table.concat(unlisted, ", ") or "none")
+    DebugLine("Group message when joining: %s", self:BuildGroupMessage() or "nothing to report")
     if API.lastBuffScanError then
         DebugLine("Last buff scan error: %s", tostring(API.lastBuffScanError))
     end
@@ -356,12 +357,23 @@ function Prepped:ResetReminders()
     end
 end
 
-function Prepped:ShowReminder(text)
+-- Shows one reminder bar. ruleId and value (a number, or { count =, name = }) let
+-- the group message say what's missing (see Prepped:BuildGroupMessage).
+function Prepped:ShowReminder(text, ruleId, value)
+    if self.collecting and ruleId then
+        self.collecting[#self.collecting + 1] = { id = ruleId, value = value }
+    end
     local line = self:GetNextLine()
     if line then
         line.text:SetText(text)
         line:Show()
     end
+end
+
+-- Supply reminders (reagents, ammo, repairs, ...) show while resting in a city or
+-- inn, and for a minute after joining a group ("Check Supplies When Joining a Group").
+function Prepped:IsSupplyTime()
+    return IsResting() or self.forceSupplies == true or GetTime() < (self.supplyCheckUntil or 0)
 end
 
 -- Missing / expiring check for a self-buff rule with a "Warn when expiring" option.
@@ -378,20 +390,116 @@ function Prepped:CheckTimedBuff(ruleId, matcher, missingText, expiringFormat)
 end
 
 -- Runs a module's reminders. Each entry is { id = ruleId, [mustRest | mustNotRest | outOfCombat] = true, ... };
--- checks[id](entry) returns the text to show, or nil.
+-- checks[id](entry) returns the text to show (or nil) and, for supplies, the amount.
+-- mustRest marks a supply reminder: see Prepped:IsSupplyTime().
 function Prepped:RunReminders(reminders, checks)
     local isResting = IsResting()
+    local supplyTime = self:IsSupplyTime()
     local inCombat = UnitAffectingCombat("player") or InCombatLockdown()
     for _, config in ipairs(reminders) do
         if self:IsRuleEnabled(config.id)
-            and not (config.mustRest and not isResting)
+            and not (config.mustRest and not supplyTime)
             and not (config.mustNotRest and isResting)
             and not (config.outOfCombat and inCombat) then
-            local text = checks[config.id](config)
+            local text, value = checks[config.id](config)
             if text then
-                self:ShowReminder(text)
+                self:ShowReminder(text, config.id, value)
             end
         end
+    end
+end
+
+------------------------------------------------------------------------
+-- Joining a group: supplies on screen for a minute, and one line in group chat
+------------------------------------------------------------------------
+local GROUP_CHECK_SECONDS = 60
+local GROUP_MESSAGE_DELAY = 2   -- let the group settle first
+local GROUP_MESSAGE_MAX = 3     -- shortages named in one message
+local CHAT_MESSAGE_LIMIT = 255
+
+local function JoinList(items)
+    if #items <= 1 then return items[1] or "" end
+    return table.concat(items, ", ", 1, #items - 1) .. " and " .. items[#items]
+end
+
+local function FillTemplate(template, value)
+    local count, name = value, nil
+    if type(value) == "table" then count, name = value.count, value.name end
+    local text = template:gsub("{count}", tostring(count or "?"))
+    text = text:gsub("{name}", tostring(name or ""))
+    return text
+end
+
+-- Every supply reminder that would show right now (ignoring the resting rule), as { id, value }.
+function Prepped:CollectSupplyShortages()
+    self.collecting, self.forceSupplies = {}, true
+    local ok, err = pcall(self.CheckReminders, self)
+    local found = self.collecting
+    self.collecting, self.forceSupplies = nil, nil
+    if not ok then geterrorhandler()(err) end
+    return found
+end
+
+-- "[Prepped] you're at 47% durability and low on ammo (150 left), remember to repair soon and buy more ammo."
+-- Uses each supply rule's `announce = { state, action }`; nil when there's nothing to say.
+function Prepped:BuildGroupMessage()
+    local states, actions, seenAction = {}, {}, {}
+    local repairBelow = self:GetRuleThreshold("general_group_announce")
+    for _, entry in ipairs(self:CollectSupplyShortages()) do
+        local rule = self:GetRule(entry.id)
+        local announce = rule and rule.announce
+        local tooMinor = entry.id == "general_repair" and (tonumber(entry.value) or 0) >= repairBelow
+        if announce and not tooMinor and #states < GROUP_MESSAGE_MAX then
+            states[#states + 1] = FillTemplate(announce[1], entry.value)
+            local action = FillTemplate(announce[2], entry.value)
+            if not seenAction[action] then
+                seenAction[action] = true
+                actions[#actions + 1] = action
+            end
+        end
+    end
+    if #states == 0 then return nil end
+    local message = "[Prepped] you're " .. JoinList(states) .. ", remember to " .. JoinList(actions) .. "."
+    if #message > CHAT_MESSAGE_LIMIT then
+        message = message:sub(1, CHAT_MESSAGE_LIMIT - 3) .. "..."
+    end
+    return message
+end
+
+function Prepped:OnGroupJoined()
+    if self.groupMessageSent then return end -- once per group
+    local now = GetTime()
+    if self:IsRuleEnabled("general_group_check") then
+        self.supplyCheckUntil = now + GROUP_CHECK_SECONDS
+    end
+    if self:IsRuleEnabled("general_group_announce") then
+        self.groupMessageAt = now + GROUP_MESSAGE_DELAY
+        self.groupMessageUntil = now + GROUP_CHECK_SECONDS
+    end
+end
+
+function Prepped:OnGroupLeft()
+    self.groupMessageSent, self.groupMessageAt, self.supplyCheckUntil = nil, nil, nil
+end
+
+-- Called on every update while a group message is pending. Waits while you're in
+-- combat, dead, on a taxi or while Forever blocks add-on chat; gives up after a minute.
+function Prepped:TrySendGroupMessage()
+    local now = GetTime()
+    if now < self.groupMessageAt then return end
+    if now > self.groupMessageUntil or not API.GroupChatType() then
+        self.groupMessageAt = nil
+        return
+    end
+    if UnitAffectingCombat("player") or UnitIsDeadOrGhost("player") or UnitOnTaxi("player") or API.InChatLockdown() then
+        self.groupMessageAt = now + 1
+        return
+    end
+    self.groupMessageAt = nil
+    self.groupMessageSent = true
+    local message = self:BuildGroupMessage()
+    if message then
+        API.SendGroupMessage(message)
     end
 end
 
@@ -430,71 +538,75 @@ end
 -- All rules, as shown in the options (Options > AddOns > Prepped).
 --   defaultThreshold + unit + range {min, max, step}: the rule has a slider
 --   hasLowWarningToggle: the threshold is "warn when this many seconds are left"
---   sliderOnly: a plain slider without its own on/off checkbox
+--   sliderOnly: a plain slider without its own on/off checkbox; sliderLabel: the slider's own label
+--   announce = { state, action }: a supply reminder named in the group message, e.g.
+--     { "low on ammo ({count} left)", "buy more ammo" } -> "you're low on ammo (150 left), remember to buy more ammo"
 Prepped.AllRules = {
     { id = "general_master", label = "Enable Prepped", group = "General", description = "Toggle the entire addon on or off." },
     { id = "general_account_wide", label = "Use Account-wide Settings", group = "General", description = "If enabled, settings are shared across all characters. If disabled, each character has their own config." },
     { id = "general_welcome", label = "Show Welcome Message", group = "General", description = "Show the loaded message when logging in." },
-    { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 40, unit = "count", range = { 0, 200, 5 }, description = "Show a warning while resting when your water count drops below this, if you are a mana user." },
+    { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 40, unit = "count", range = { 0, 200, 5 }, description = "Show a warning while resting when your water count drops below this, if you are a mana user.", announce = { "low on water ({count} left)", "buy more water" } },
     { id = "general_water_minlevel", label = "Water Reminder From Level", group = "General", sliderOnly = true, defaultThreshold = 10, unit = "level", range = { 1, 60, 1 }, description = "Minimum level for the Buy Water reminder." },
-    { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 100, unit = "percent", range = { 0, 100, 5 }, description = "Show a warning while resting when your gear durability drops below this percentage." },
+    { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 100, unit = "percent", range = { 0, 100, 5 }, description = "Show a warning while resting when your gear durability drops below this percentage.", announce = { "at {count}% durability", "repair soon" } },
     { id = "general_food", label = "Missing Food Buff", group = "General", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "While leveling, reminds you to keep a food buff (Well Fed) up when you're not resting, not in combat and not mounted. In Forever, cooked food also gives +5% experience from kills." },
     { id = "general_camp", label = "Missing Camp Benefits", group = "General", hasLowWarningToggle = true, defaultThreshold = 300, range = { 0, 600, 10 }, description = "While leveling, reminds you to get Camp Benefits (sit at a camp for a minute) when you're not resting, not in combat and not mounted. Camp Benefits combines the buffs of the camp's objects and lasts an hour." },
+    { id = "general_group_check", label = "Check Supplies When Joining a Group", group = "General", description = "When you join a party or raid, show your supply reminders (reagents, ammo, repairs and so on) for a minute, even outside cities and inns. Only you see them." },
+    { id = "general_group_announce", label = "Tell My Group", group = "General", defaultThreshold = 50, unit = "percent", sliderLabel = "Repairs below", range = { 0, 100, 5 }, description = "When you join a party or raid, post one line in group chat with what you're low on, for example \"[Prepped] you're at 47% durability, remember to repair soon.\" Once per group, never during combat. Durability is only mentioned below this percentage." },
 
-    { id = "hunter_no_ammo", label = "No Ammo Equipped", group = "Hunter", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot." },
-    { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, unit = "count", range = { 0, 4000, 100 }, description = "Show a warning while resting when your ammo count drops below this." },
-    { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, unit = "count", range = { 0, 1000, 50 }, description = "Show a warning at any time when your ammo count drops below this." },
+    { id = "hunter_no_ammo", label = "No Ammo Equipped", group = "Hunter", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot.", announce = { "out of ammo", "buy more ammo" } },
+    { id = "hunter_ammo_low", label = "Low Ammo", group = "Hunter", defaultThreshold = 1000, unit = "count", range = { 0, 4000, 100 }, description = "Show a warning while resting when your ammo count drops below this.", announce = { "low on ammo ({count} left)", "buy more ammo" } },
+    { id = "hunter_ammo_critical", label = "Critical Ammo", group = "Hunter", defaultThreshold = 200, unit = "count", range = { 0, 1000, 50 }, description = "Show a warning while you're out adventuring when your ammo count drops below this.", announce = { "low on ammo ({count} left)", "buy more ammo" } },
     { id = "hunter_aspect", label = "Missing Aspect", group = "Hunter", description = "Reminds you to have an Aspect buff active." },
     { id = "hunter_no_pet", label = "Missing Pet", group = "Hunter", description = "Reminds you to have your pet active if you know Tame Beast and are not resting." },
     { id = "hunter_pet_unhappy", label = "Unhappy Pet", group = "Hunter", description = "Reminds you to feed your pet if it is unhappy." },
-    { id = "hunter_pet_food", label = "Low Pet Food", group = "Hunter", defaultThreshold = 20, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have less food your active pet can eat than this." },
+    { id = "hunter_pet_food", label = "Low Pet Food", group = "Hunter", defaultThreshold = 20, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have less food your active pet can eat than this.", announce = { "low on pet food ({count} left)", "buy more pet food" } },
 
-    { id = "mage_powder", label = "Low Arcane Powder", group = "Mage", defaultThreshold = 10, unit = "count", range = { 0, 100, 1 }, description = "Show a warning while resting when your Arcane Powder count drops below this." },
+    { id = "mage_powder", label = "Low Arcane Powder", group = "Mage", defaultThreshold = 10, unit = "count", range = { 0, 100, 1 }, description = "Show a warning while resting when your Arcane Powder count drops below this.", announce = { "low on Arcane Powder ({count} left)", "buy more Arcane Powder" } },
     { id = "mage_rune_teleport", label = "Low Runes of Teleportation", group = "Mage", defaultThreshold = 10, unit = "count", range = { 0, 60, 1 }, description = "Show a warning while resting when your Runes of Teleportation count drops below this." },
-    { id = "mage_rune_portals", label = "Low Runes of Portals", group = "Mage", defaultThreshold = 10, unit = "count", range = { 0, 60, 1 }, description = "Show a warning while resting when your Runes of Portals count drops below this." },
+    { id = "mage_rune_portals", label = "Low Runes of Portals", group = "Mage", defaultThreshold = 10, unit = "count", range = { 0, 60, 1 }, description = "Show a warning while resting when your Runes of Portals count drops below this.", announce = { "low on Runes of Portals ({count} left)", "buy more Runes of Portals" } },
     { id = "mage_ai_buff", label = "Missing Arcane Intellect Buff", group = "Mage", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with Arcane Intellect." },
     { id = "mage_armor_buff", label = "Missing Armor Buff", group = "Mage", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with an Armor buff." },
     { id = "mage_mana_gem", label = "Missing Mana Gem", group = "Mage", description = "Reminds you to conjure a Mana Gem if you are not resting and don't have one." },
 
-    { id = "shaman_totems", label = "Missing Totem Items", group = "Shaman", description = "Show a warning out of combat when the Earth, Fire, Water or Air Totem item for totems you know isn't in your bags (for example when it's still in the bank)." },
-    { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 8, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Ankh count drops below this." },
+    { id = "shaman_totems", label = "Missing Totem Items", group = "Shaman", description = "Show a warning out of combat when the Earth, Fire, Water or Air Totem item for totems you know isn't in your bags (for example when it's still in the bank).", announce = { "missing your {name}", "check your bank" } },
+    { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 8, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Ankh count drops below this.", announce = { "low on Ankhs ({count} left)", "buy more Ankhs" } },
     { id = "shaman_fish_oil", label = "Buy Fish Oil", group = "Shaman", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Fish Oil count drops below this." },
     { id = "shaman_fish_scales", label = "Buy Fish Scales", group = "Shaman", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Fish Scales count drops below this." },
     { id = "shaman_shield_buff", label = "Missing Shield Buff", group = "Shaman", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with a Shield buff." },
     { id = "shaman_weapon_buff", label = "Missing Weapon Buff", group = "Shaman", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Smart reminder for Shaman weapon imbues based on spec/dual-wielding." },
 
-    { id = "rogue_no_ammo", label = "No Ammo/Thrown Equipped", group = "Rogue", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
-    { id = "rogue_ammo_low", label = "Low Ammo/Thrown", group = "Rogue", defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 }, description = "Show a warning while resting when your ammo/thrown count drops below this." },
-    { id = "rogue_ammo_critical", label = "Critical Ammo/Thrown", group = "Rogue", defaultThreshold = 20, unit = "count", range = { 0, 500, 10 }, description = "Show a warning at any time when your ammo/thrown count drops below this." },
+    { id = "rogue_no_ammo", label = "No Ammo/Thrown Equipped", group = "Rogue", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges).", announce = { "out of ammo", "buy more ammo" } },
+    { id = "rogue_ammo_low", label = "Low Ammo/Thrown", group = "Rogue", defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 }, description = "Show a warning while resting when your ammo/thrown count drops below this.", announce = { "low on ammo ({count} left)", "buy more ammo" } },
+    { id = "rogue_ammo_critical", label = "Critical Ammo/Thrown", group = "Rogue", defaultThreshold = 20, unit = "count", range = { 0, 500, 10 }, description = "Show a warning at any time when your ammo/thrown count drops below this.", announce = { "low on ammo ({count} left)", "buy more ammo" } },
     { id = "rogue_weapon_poison", label = "Missing Weapon Poison", group = "Rogue", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to apply poison to your weapons when you have poisons in your bags." },
-    { id = "rogue_poison_stock", label = "Low Poison Stock", group = "Rogue", defaultThreshold = 20, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when your total poison count drops below this." },
-    { id = "rogue_flash_powder", label = "Low Flash Powder", group = "Rogue", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Flash Powder count drops below this (for Vanish)." },
-    { id = "rogue_blinding_powder", label = "Low Blinding Powder", group = "Rogue", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Blinding Powder count drops below this (for Blind). It isn't a vendor reagent, so Reagent Economy doesn't hide it." },
+    { id = "rogue_poison_stock", label = "Low Poison Stock", group = "Rogue", defaultThreshold = 20, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when your total poison count drops below this.", announce = { "low on poisons ({count} left)", "make more poisons" } },
+    { id = "rogue_flash_powder", label = "Low Flash Powder", group = "Rogue", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Flash Powder count drops below this (for Vanish).", announce = { "low on Flash Powder ({count} left)", "buy more Flash Powder" } },
+    { id = "rogue_blinding_powder", label = "Low Blinding Powder", group = "Rogue", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Blinding Powder count drops below this (for Blind). It isn't a vendor reagent, so Reagent Economy doesn't hide it.", announce = { "low on Blinding Powder ({count} left)", "make more Blinding Powder" } },
 
-    { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
-    { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 }, description = "Show a warning while resting when your ammo/thrown count drops below this." },
-    { id = "warrior_ammo_critical", label = "Critical Ammo/Thrown", group = "Warrior", defaultThreshold = 20, unit = "count", range = { 0, 500, 10 }, description = "Show a warning at any time when your ammo/thrown count drops below this." },
+    { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges).", announce = { "out of ammo", "buy more ammo" } },
+    { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 }, description = "Show a warning while resting when your ammo/thrown count drops below this.", announce = { "low on ammo ({count} left)", "buy more ammo" } },
+    { id = "warrior_ammo_critical", label = "Critical Ammo/Thrown", group = "Warrior", defaultThreshold = 20, unit = "count", range = { 0, 500, 10 }, description = "Show a warning at any time when your ammo/thrown count drops below this.", announce = { "low on ammo ({count} left)", "buy more ammo" } },
 
     { id = "paladin_aura", label = "Missing Aura", group = "Paladin", description = "Reminds you to have a Paladin Aura active at all times." },
     { id = "paladin_blessing", label = "Missing Self-Blessing", group = "Paladin", hasLowWarningToggle = true, defaultThreshold = 30, range = { 0, 600, 10 }, description = "Reminds you to have a Blessing active on yourself when not resting." },
-    { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 50, unit = "count", range = { 0, 200, 10 }, description = "Show a warning while resting when your Symbol of Kings count drops below this." },
-    { id = "paladin_divinity", label = "Low Symbol of Divinity", group = "Paladin", defaultThreshold = 5, unit = "count", range = { 0, 20, 1 }, description = "Show a warning while resting when your Symbol of Divinity count drops below this." },
+    { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 50, unit = "count", range = { 0, 200, 10 }, description = "Show a warning while resting when your Symbol of Kings count drops below this.", announce = { "low on Symbol of Kings ({count} left)", "buy more Symbols of Kings" } },
+    { id = "paladin_divinity", label = "Low Symbol of Divinity", group = "Paladin", defaultThreshold = 5, unit = "count", range = { 0, 20, 1 }, description = "Show a warning while resting when your Symbol of Divinity count drops below this.", announce = { "low on Symbol of Divinity ({count} left)", "buy more Symbols of Divinity" } },
     { id = "paladin_righteous_fury", label = "Missing Righteous Fury", group = "Paladin", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec." },
 
     { id = "priest_fortitude", label = "Missing Power Word: Fortitude", group = "Priest", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with Power Word: Fortitude (or Prayer of Fortitude if learned). Warns when missing or expiring soon." },
     { id = "priest_inner_fire", label = "Missing Inner Fire", group = "Priest", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to have Inner Fire active when not resting." },
-    { id = "priest_candles", label = "Low Candles", group = "Priest", defaultThreshold = 10, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have fewer candles than this for your Prayer spells: Sacred Candles once you know Prayer of Fortitude rank 2, Prayer of Spirit or Prayer of Shadow Protection, Holy Candles before that." },
+    { id = "priest_candles", label = "Low Candles", group = "Priest", defaultThreshold = 10, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have fewer candles than this for your Prayer spells: Sacred Candles once you know Prayer of Fortitude rank 2, Prayer of Spirit or Prayer of Shadow Protection, Holy Candles before that.", announce = { "low on {name} ({count} left)", "buy more {name}" } },
 
     { id = "druid_mark", label = "Missing Mark of the Wild", group = "Druid", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with Mark of the Wild (or Gift of the Wild) when not resting or traveling." },
-    { id = "druid_rebirth_seeds", label = "Low Rebirth Seeds", group = "Druid", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when you have fewer seeds for your highest Rebirth rank than this." },
-    { id = "druid_gift_reagents", label = "Low Gift of the Wild Reagents", group = "Druid", defaultThreshold = 10, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have fewer reagents for your Gift of the Wild rank (Wild Berries or Wild Thornroot) than this." },
+    { id = "druid_rebirth_seeds", label = "Low Rebirth Seeds", group = "Druid", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when you have fewer seeds for your highest Rebirth rank than this.", announce = { "low on {name} ({count} left)", "buy more {name}" } },
+    { id = "druid_gift_reagents", label = "Low Gift of the Wild Reagents", group = "Druid", defaultThreshold = 10, unit = "count", range = { 0, 100, 5 }, description = "Show a warning while resting when you have fewer reagents for your Gift of the Wild rank (Wild Berries or Wild Thornroot) than this.", announce = { "low on {name} ({count} left)", "buy more {name}" } },
 
     { id = "warlock_armor", label = "Missing Demon Armor", group = "Warlock", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to have Demon Armor (or Demon Skin) active when not resting." },
     { id = "warlock_pet", label = "Missing Demon", group = "Warlock", description = "Reminds you to summon a demon when not resting (not while you have a Demonic Sacrifice buff)." },
     { id = "warlock_weapon_stone", label = "Missing Weapon Stone", group = "Warlock", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to put a Firestone or Spellstone on your weapon once you can create one (weapon imbues in Forever; a wizard oil doesn't count)." },
-    { id = "warlock_healthstone", label = "Missing Healthstone", group = "Warlock", description = "Reminds you to create a Healthstone when you are out of combat, not resting, and have a Soul Shard." },
-    { id = "warlock_soulstone", label = "Missing Soulstone", group = "Warlock", description = "Reminds you to create a Soulstone when you are out of combat, not resting, have a Soul Shard and aren't soulstoned yourself." },
-    { id = "warlock_soul_shards", label = "Low Soul Shards", group = "Warlock", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning out of combat, when not resting, while you have fewer Soul Shards than this." },
+    { id = "warlock_healthstone", label = "Missing Healthstone", group = "Warlock", description = "Reminds you to create a Healthstone when you are out of combat, not resting, and have a Soul Shard.", announce = { "missing a Healthstone", "create a Healthstone" } },
+    { id = "warlock_soulstone", label = "Missing Soulstone", group = "Warlock", description = "Reminds you to create a Soulstone when you are out of combat, not resting, have a Soul Shard and aren't soulstoned yourself.", announce = { "missing a Soulstone", "create a Soulstone" } },
+    { id = "warlock_soul_shards", label = "Low Soul Shards", group = "Warlock", defaultThreshold = 5, unit = "count", range = { 0, 40, 1 }, description = "Show a warning out of combat, when not resting, while you have fewer Soul Shards than this.", announce = { "low on Soul Shards ({count} left)", "farm more Soul Shards" } },
 }
 
 function Prepped:InitializeDefaults()
@@ -541,6 +653,9 @@ for _, event in ipairs({
     "CHARACTER_POINTS_CHANGED",
     "ACTIVE_TALENT_GROUP_CHANGED",
     "TRAIT_CONFIG_UPDATED",
+    "GROUP_JOINED",
+    "GROUP_FORMED",
+    "GROUP_LEFT",
 }) do
     API.RegisterEvent(container, event)
 end
@@ -582,6 +697,10 @@ container:SetScript("OnEvent", function(self, event, ...)
         if isLogin or isReload then
             Prepped:ShowWelcomeMessage()
         end
+    elseif event == "GROUP_JOINED" or event == "GROUP_FORMED" then
+        Prepped:OnGroupJoined()
+    elseif event == "GROUP_LEFT" then
+        Prepped:OnGroupLeft()
     end
     Prepped:CheckReminders()
 end)
@@ -591,6 +710,9 @@ container:SetScript("OnUpdate", function(self, elapsed)
     updateTimer = updateTimer + elapsed
     if updateTimer >= 0.1 then
         updateTimer = 0
+        if Prepped.groupMessageAt then
+            Prepped:TrySendGroupMessage()
+        end
         Prepped:CheckReminders()
     end
 end)

@@ -60,7 +60,7 @@ function checks.priest_candles(config)
     end
     local count, name = API.CountReagentForKnownSpell(CANDLES)
     if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format("Low on %s (%d left)", name or "candles", count)
+        return string.format("Low on %s (%d left)", name or "candles", count), { name = name or "candles", count = count }
     end
     return nil
 end

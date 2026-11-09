@@ -363,6 +363,153 @@ Run("deDE unlisted Forever teleport (no English fallback)", { class = "MAGE", sp
     {}, { "Low on reagents: Rune of Teleportation (0 left!)" })
 
 ------------------------------------------------------------------------
+-- Joining a group: supplies on screen for a minute, one line in group chat
+------------------------------------------------------------------------
+local function Setup(S, configure)
+    S.time = S.time or NOW
+    local env = Mock.BuildEnv(S)
+    LoadAddon(env)
+    if configure then configure(env.Prepped) end
+    return env
+end
+local function JoinGroup(env, S, kind)
+    S[kind or "inGroup"] = true
+    env.__fire("GROUP_JOINED", 1, "Party-0001")
+end
+local function Messages(env)
+    local out = {}
+    for _, m in ipairs(env.__chat) do out[#out + 1] = m.chatType .. ": " .. m.message end
+    return table.concat(out, " || ")
+end
+-- A hunter with plenty of water and pet food, gear at 47% and 150 arrows
+local function Hunter(extra)
+    local S = { class = "HUNTER", spells = { 1515, 13165 }, equipped = { [18] = 2504, [1] = 2131 }, headDurability = 47,
+        ammoCount = 150, pet = { happiness = 3, foodTypes = { "Meat" }, canEat = { [117] = true } }, buffs = { { spellId = 13165 } },
+        bags = { { bag = 0, slot = 1, itemID = 117, count = 40 }, { bag = 0, slot = 2, itemID = 159, count = 60 } } }
+    for k, v in pairs(extra or {}) do S[k] = v end
+    return S
+end
+local WATER = { { bag = 0, slot = 2, itemID = 159, count = 60 } }
+local HUNTER_MESSAGE = "PARTY: [Prepped] you're at 47% durability and low on ammo (150 left), remember to repair soon and buy more ammo."
+
+do
+    local S = Hunter()
+    local env = Setup(S)
+    JoinGroup(env, S)
+    env.__tick(1)
+    Check("group: waits a moment after joining", #env.__chat == 0, Messages(env))
+    env.__tick(2)
+    Check("group: one message in party chat", Messages(env) == HUNTER_MESSAGE, Messages(env))
+    env.__fire("GROUP_JOINED", 1, "Party-0001")
+    env.__tick(5)
+    Check("group: only once per group", #env.__chat == 1, Messages(env))
+    S.inGroup = false
+    env.__fire("GROUP_LEFT", 1, "Party-0001")
+    JoinGroup(env, S)
+    env.__tick(3)
+    Check("group: again in the next group", #env.__chat == 2, Messages(env))
+    Check("group: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+end
+
+do
+    local S = Hunter()
+    local env = Setup(S)
+    JoinGroup(env, S, "inRaid")
+    env.__tick(3)
+    Check("group: raid chat in a raid", env.__chat[1] ~= nil and env.__chat[1].chatType == "RAID", Messages(env))
+    local S2 = Hunter()
+    local env2 = Setup(S2)
+    JoinGroup(env2, S2, "instanceGroup")
+    env2.__tick(3)
+    Check("group: instance chat in an instance group", env2.__chat[1] ~= nil and env2.__chat[1].chatType == "INSTANCE_CHAT", Messages(env2))
+end
+
+-- Waits while it can't or shouldn't post, then sends once; gives up after a minute
+for _, case in ipairs({ { "chatLockdown", "while Forever blocks add-on chat" }, { "inCombat", "in combat" }, { "dead", "while dead" } }) do
+    local S = Hunter({ [case[1]] = true })
+    local env = Setup(S)
+    JoinGroup(env, S)
+    env.__tick(10)
+    Check("group: waits " .. case[2], #env.__chat == 0, Messages(env))
+    S[case[1]] = false
+    env.__tick(2)
+    Check("group: sends after waiting " .. case[2], Messages(env) == HUNTER_MESSAGE, Messages(env))
+end
+do
+    local S = Hunter({ chatLockdown = true })
+    local env = Setup(S)
+    JoinGroup(env, S)
+    env.__tick(65)
+    S.chatLockdown = false
+    env.__tick(5)
+    Check("group: gives up after a minute", #env.__chat == 0, Messages(env))
+end
+
+do
+    local S = Hunter({ headDurability = 80, ammoCount = 3000 })
+    local env = Setup(S)
+    JoinGroup(env, S)
+    env.__tick(3)
+    Check("group: nothing worth saying, no message (80% is above the 50% repair limit)", #env.__chat == 0, Messages(env))
+    local S2 = Hunter({ headDurability = 80, ammoCount = 3000 })
+    local env2 = Setup(S2, function(P) P:SetRuleThreshold("general_group_announce", 90) end)
+    JoinGroup(env2, S2)
+    env2.__tick(3)
+    Check("group: repair limit is a setting", Messages(env2) == "PARTY: [Prepped] you're at 80% durability, remember to repair soon.", Messages(env2))
+end
+
+for _, rule in ipairs({ "general_group_announce", "general_master" }) do
+    local S = Hunter()
+    local env = Setup(S, function(P) P:SetRuleEnabled(rule, false) end)
+    JoinGroup(env, S)
+    env.__tick(5)
+    Check("group: no message with " .. rule .. " off", #env.__chat == 0, Messages(env))
+end
+
+-- Supply reminders on screen for a minute after joining, even outside cities
+do
+    local S = { class = "ROGUE", spells = { 1856 }, items = { [5140] = 3 } }
+    local env = Setup(S)
+    env.Prepped:CheckReminders()
+    Check("group check: supplies hidden outside cities before joining", not Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+    JoinGroup(env, S)
+    env.__tick(1)
+    Check("group check: shown after joining a group", Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+    env.__tick(60)
+    Check("group check: hidden again after a minute", not Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+
+    local S2 = { class = "ROGUE", spells = { 1856 }, items = { [5140] = 3 } }
+    local env2 = Setup(S2, function(P) P:SetRuleEnabled("general_group_check", false) end)
+    JoinGroup(env2, S2)
+    env2.__tick(1)
+    Check("group check off: stays hidden outside cities", not Has(VisibleReminders(env2), "Low on Flash Powder (3 left)"))
+    env2.__tick(3)
+    Check("group check off: the group message still names it",
+        Messages(env2) == "PARTY: [Prepped] you're low on Flash Powder (3 left), remember to buy more Flash Powder.", Messages(env2))
+end
+
+-- Names in the message
+for _, case in ipairs({
+    { { class = "SHAMAN", spells = { 8071, 3599, 5394 }, items = { [5175] = 1 }, bags = WATER },
+        "PARTY: [Prepped] you're missing your Fire Totem and Water Totem, remember to check your bank." },
+    { { class = "PRIEST", spells = { 21562, 21564 }, items = { [17029] = 2 }, bags = WATER },
+        "PARTY: [Prepped] you're low on Sacred Candles (2 left), remember to buy more Sacred Candles." },
+    { { class = "DRUID", spells = { 20484, 20739, 20742, 20747, 20748 }, items = { [17038] = 1 }, bags = WATER },
+        "PARTY: [Prepped] you're low on Ironwood Seeds (1 left), remember to buy more Ironwood Seeds." },
+    { { class = "WARLOCK", spells = { 688, 6201, 693 }, pet = {}, items = { [6265] = 2, [5512] = 1 }, bags = WATER },
+        "PARTY: [Prepped] you're missing a Soulstone and low on Soul Shards (2 left), remember to create a Soulstone and farm more Soul Shards." },
+    -- at most three things, the rest is left out
+    { Hunter({ headDurability = 30, bags = { { bag = 0, slot = 1, itemID = 117, count = 5 } } }),
+        "PARTY: [Prepped] you're low on water (0 left), at 30% durability and low on ammo (150 left), remember to buy more water, repair soon and buy more ammo." },
+}) do
+    local S = case[1]
+    local env = Setup(S)
+    JoinGroup(env, S)
+    env.__tick(3)
+    Check("group message: " .. case[2], Messages(env) == case[2], Messages(env))
+end
+
+------------------------------------------------------------------------
 -- /prepped debug
 ------------------------------------------------------------------------
 do
@@ -393,6 +540,13 @@ do
     Check("debug: buffs on you", DebugValue(env, "Buffs on you") == "none", DebugValue(env, "Buffs on you"))
     -- every spell ID Prepped lists exists in the (Forever) spell data
     Check("debug: no unknown spell IDs", DebugValue(env, "Unknown spell IDs") == "none", DebugValue(env, "Unknown spell IDs"))
+end
+
+do
+    local env = Setup(Hunter())
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    Check("debug: group message preview", "PARTY: " .. tostring(DebugValue(env, "Group message when joining")) == HUNTER_MESSAGE,
+        DebugValue(env, "Group message when joining"))
 end
 
 -- The buffs on you are listed with their IDs (to find Forever-only IDs), unless they're hidden
@@ -427,11 +581,13 @@ for _, case in ipairs({
 end
 
 do
-    local env = Mock.BuildEnv({ class = "DRUID", spells = { 1126 }, time = NOW, form = 1 })
+    local env = Mock.BuildEnv({ class = "DRUID", spells = { 1126 }, time = NOW, form = 1, bags = WATER })
     LoadAddon(env)
     pcall(env.SlashCmdList.PREPPED, "debug")
     local out = table.concat(env.__printed, "\n")
     Check("debug: druid shapeshift form", out:find("Shapeshift form ID: 1", 1, true) ~= nil, out)
+    Check("debug: nothing to say to a group", DebugValue(env, "Group message when joining") == "nothing to report",
+        DebugValue(env, "Group message when joining"))
     Check("debug: no Lua errors (druid)", #env.__errors == 0, table.concat(env.__errors, " || "))
 end
 

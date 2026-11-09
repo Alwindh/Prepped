@@ -54,7 +54,7 @@ local function CheckReagent(config)
     if not API.KnowsFamily(config.family) or API.HasReagentEconomy() then return nil end
     local count = C_Item.GetItemCount(config.item)
     if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format(config.message, count)
+        return string.format(config.message, count), count
     end
     return nil
 end
