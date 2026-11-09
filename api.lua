@@ -5,12 +5,22 @@
 -- (C_Spell.GetSpellName), so detection works in every client language.
 -- Buff data can be "secret" (unreadable by addons) while Blizzard's combat
 -- restrictions are active; the buff helpers report that as "unknown".
+--
+-- Everything that is costly to read (spellbook, buffs, bags, talents, Legacy
+-- perks) is cached here. The core's event handler invalidates the caches
+-- (API.InvalidateSpells / Talents / Auras / Bags); the TTLs are only a safety net.
 
 local _, ns = ...
 local API = {}
 ns.API = API
 
 local GetTime = GetTime
+
+local function Wipe(t)
+    for key in pairs(t) do t[key] = nil end
+    return t
+end
+API.Wipe = Wipe
 
 ------------------------------------------------------------------------
 -- Secret values
@@ -41,6 +51,11 @@ function API.DescribeAuraSecrecy(spellID)
     if not ok or level == nil then return "unknown" end
     return SECRECY_LABELS[level] or ("level " .. tostring(level))
 end
+
+local function InCombat()
+    return (UnitAffectingCombat("player") or InCombatLockdown()) and true or false
+end
+API.InCombat = InCombat
 
 ------------------------------------------------------------------------
 -- Spell families
@@ -104,9 +119,9 @@ function API.Matcher(...)
 end
 
 ------------------------------------------------------------------------
--- Spellbook (cached; rebuilt on SPELLS_CHANGED and every few seconds)
+-- Spellbook (rebuilt after SPELLS_CHANGED and talent events)
 ------------------------------------------------------------------------
-local SPELL_CACHE_TTL = 10
+local SPELL_CACHE_TTL = 60 -- safety net only: the spellbook changes fire events
 local spellCache, spellIDSet, spellCacheTime, spellCacheGeneration = nil, nil, 0, 0
 
 -- Returns { [spellName] = { spellID, ... } } for every learned player spell.
@@ -194,16 +209,17 @@ function API.PickByKnownSpell(options)
     return nil
 end
 
--- Count and name of the reagent for the best learned option. If the spell is
--- learned under an ID that isn't listed, every listed reagent counts (name nil).
+-- Count and name of the reagent for the best learned option, and the option. If
+-- the spell is learned under an ID that isn't listed, every listed reagent
+-- counts (name and option nil).
 function API.CountReagentForKnownSpell(options)
     local option = API.PickByKnownSpell(options)
     if option then
-        return C_Item.GetItemCount(option.item), option.name
+        return C_Item.GetItemCount(option.item), option.name, option
     end
-    local items = {}
-    for i, entry in ipairs(options) do items[i] = entry.item end
-    return API.CountItems(items), nil
+    local total = 0
+    for _, entry in ipairs(options) do total = total + C_Item.GetItemCount(entry.item) end
+    return total, nil, nil
 end
 
 -- predicate(spellName, spellID) -> bool. Returns the matching learned spell IDs.
@@ -219,30 +235,33 @@ function API.GetKnownSpellIDsMatching(predicate)
     return result
 end
 
+-- Learned spell IDs of a family, listed or matched by name (cached per spellbook).
+function API.GetKnownFamilyIDs(family)
+    GetSpellCache()
+    if family.knownIDsGeneration ~= spellCacheGeneration then
+        family.knownIDs = API.GetKnownSpellIDsMatching(function(name, id)
+            return API.FamilyMatches(family, name, id)
+        end)
+        family.knownIDsGeneration = spellCacheGeneration
+    end
+    return family.knownIDs
+end
+
 ------------------------------------------------------------------------
 -- Player buffs
 ------------------------------------------------------------------------
+-- One scan of your buffs is shared by every buff check until UNIT_AURA (or a
+-- change of combat restrictions) invalidates it, instead of one scan per
+-- check. The entries are reused, so a rescan creates no garbage of its own.
 local MAX_AURAS = 255
+local AURA_SNAPSHOT_TTL = 5 -- safety net; UNIT_AURA normally invalidates sooner
 
-local function SpellAuraMayBeSecret(spellID)
-    local ok, secret = pcall(C_Secrets.ShouldSpellAuraBeSecret, spellID)
-    return (not ok) or secret ~= false
-end
+local auraEntries = {} -- { name =, spellId =, expirationTime = } per readable buff
+local auraCount, auraSawSecret = 0, false
+local auraSnapshotOK, auraSnapshotTime = nil, 0 -- OK: nil = stale, false = scan failed
 
--- Some auras were unreadable and none matched. "Missing" is still reliable if
--- every learned spell that could provide the buff is flagged never-secret:
--- that buff would have been readable had it been present.
-local function MissingIsReliable(matcher)
-    local ids = API.GetKnownSpellIDsMatching(matcher)
-    if #ids == 0 then return false end
-    for _, id in ipairs(ids) do
-        if SpellAuraMayBeSecret(id) then return false end
-    end
-    return true
-end
-
-local function ScanPlayerBuffs(matcher)
-    local sawSecret = false
+local function ScanPlayerBuffs()
+    local count, sawSecret = 0, false
     for index = 1, MAX_AURAS do
         local aura = C_UnitAuras.GetAuraDataByIndex("player", index, "HELPFUL")
         if not aura then break end
@@ -253,20 +272,69 @@ local function ScanPlayerBuffs(matcher)
             local name, spellId = aura.name, aura.spellId
             if IsSecret(name) or IsSecret(spellId) then
                 sawSecret = true
-            elseif matcher(name, spellId) then
+            else
                 local expirationTime = aura.expirationTime
                 if expirationTime == nil or IsSecret(expirationTime) or expirationTime <= 0 then
-                    return "present", nil
+                    expirationTime = nil
                 end
-                return "present", expirationTime - GetTime()
+                count = count + 1
+                local entry = auraEntries[count]
+                if not entry then
+                    entry = {}
+                    auraEntries[count] = entry
+                end
+                entry.name, entry.spellId, entry.expirationTime = name, spellId, expirationTime
             end
         end
     end
+    return count, sawSecret
+end
 
-    if sawSecret and not MissingIsReliable(matcher) then
-        return "unknown"
+local function RefreshAuraSnapshot()
+    local now = GetTime()
+    if auraSnapshotOK ~= nil and (now - auraSnapshotTime) < AURA_SNAPSHOT_TTL then
+        return auraSnapshotOK
     end
-    return "missing"
+    local ok, count, sawSecret = pcall(ScanPlayerBuffs)
+    auraSnapshotTime = now
+    if ok then
+        auraCount, auraSawSecret, auraSnapshotOK = count, sawSecret, true
+    else
+        -- Most likely restricted buff data; kept for /prepped debug.
+        API.lastBuffScanError = count
+        auraCount, auraSawSecret, auraSnapshotOK = 0, false, false
+    end
+    return auraSnapshotOK
+end
+
+local function SpellAuraMayBeSecret(spellID)
+    local ok, secret = pcall(C_Secrets.ShouldSpellAuraBeSecret, spellID)
+    return (not ok) or secret ~= false
+end
+
+-- Learned spell IDs per matcher, cached per spellbook (see MissingIsReliable).
+local knownIDsByMatcher = setmetatable({}, { __mode = "k" })
+
+local function KnownIDsFor(matcher)
+    GetSpellCache()
+    local entry = knownIDsByMatcher[matcher]
+    if not entry or entry.generation ~= spellCacheGeneration then
+        entry = { generation = spellCacheGeneration, ids = API.GetKnownSpellIDsMatching(matcher) }
+        knownIDsByMatcher[matcher] = entry
+    end
+    return entry.ids
+end
+
+-- Some auras were unreadable and none matched. "Missing" is still reliable if
+-- every learned spell that could provide the buff is flagged never-secret:
+-- that buff would have been readable had it been present.
+local function MissingIsReliable(matcher)
+    local ids = KnownIDsFor(matcher)
+    if #ids == 0 then return false end
+    for _, id in ipairs(ids) do
+        if SpellAuraMayBeSecret(id) then return false end
+    end
+    return true
 end
 
 -- Looks for a helpful aura on the player.
@@ -281,13 +349,36 @@ function API.FindPlayerBuff(matcher)
     if API.AreAurasRestricted() then
         return "unknown"
     end
-    local ok, state, remaining = pcall(ScanPlayerBuffs, matcher)
-    if not ok then
-        -- Most likely restricted buff data; kept for /prepped debug.
-        API.lastBuffScanError = state
+    if not RefreshAuraSnapshot() then
         return "unknown"
     end
-    return state, remaining
+    for i = 1, auraCount do
+        local entry = auraEntries[i]
+        if matcher(entry.name, entry.spellId) then
+            local expirationTime = entry.expirationTime
+            if expirationTime then
+                return "present", expirationTime - GetTime()
+            end
+            return "present", nil
+        end
+    end
+    if auraSawSecret and not MissingIsReliable(matcher) then
+        return "unknown"
+    end
+    return "missing"
+end
+
+-- "Name id" for each buff on you, for /prepped debug (nil while buffs are hidden).
+function API.ListPlayerBuffs()
+    if API.AreAurasRestricted() then return nil end
+    auraSnapshotOK = nil
+    if not RefreshAuraSnapshot() then return nil end
+    local list = {}
+    for i = 1, auraCount do
+        local entry = auraEntries[i]
+        list[i] = string.format("%s %s", tostring(entry.name), tostring(entry.spellId))
+    end
+    return list
 end
 
 ------------------------------------------------------------------------
@@ -297,6 +388,9 @@ end
 -- sharpening stones and oils are "Temporary" enchants and can sit on the same
 -- weapon, so only Imbue enchants count as a poison/imbue.
 local ENCHANT_IMBUE = (Enum.ItemEnchantType and Enum.ItemEnchantType.Imbue) or 3
+local ITEM_CLASS_WEAPON = (Enum.ItemClass and Enum.ItemClass.Weapon) or 2
+local MAIN_HAND_SLOT = INVSLOT_MAINHAND or 16
+local OFF_HAND_SLOT = INVSLOT_OFFHAND or 17
 
 local ENCHANT_TYPE_LABELS = { [0] = "none", [1] = "permanent", [2] = "temporary", [3] = "imbue" }
 
@@ -329,14 +423,28 @@ function API.GetWeaponImbues()
     return hasMH, mhMs, hasOH, ohMs
 end
 
+function API.HasMainHandWeapon()
+    return GetInventoryItemID("player", MAIN_HAND_SLOT) ~= nil
+end
+
+-- Dual wielding: the off hand holds a weapon (not a shield or off-hand frill).
+function API.IsOffHandWeapon()
+    local itemID = GetInventoryItemID("player", OFF_HAND_SLOT)
+    if not itemID then return false end
+    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemID)
+    return classID == ITEM_CLASS_WEAPON
+end
+
 ------------------------------------------------------------------------
--- Skills, reagents, bags, consumables
+-- Character state
 ------------------------------------------------------------------------
 -- Still gaining levels: below the max level (as Forever's own UI works it out)
 -- and experience not switched off.
 function API.IsLeveling()
-    local maxLevel = math.min(GetMaxLevelForPlayerExpansion() or 60, GetMaxPlayerLevel() or 60)
-    return UnitLevel("player") < maxLevel and not IsXPUserDisabled()
+    local expansionMax = (GetMaxLevelForPlayerExpansion and GetMaxLevelForPlayerExpansion()) or 60
+    local playerMax = (GetMaxPlayerLevel and GetMaxPlayerLevel()) or 60
+    local xpOff = IsXPUserDisabled and IsXPUserDisabled()
+    return UnitLevel("player") < math.min(expansionMax, playerMax) and not xpOff
 end
 
 -- On a mount or in a travel shape: druid Travel (3), Aquatic (4) or Flight
@@ -373,23 +481,9 @@ function API.SendGroupMessage(message)
     return ok
 end
 
--- "Name id" for each buff on you, for /prepped debug (nil while buffs are hidden).
-function API.ListPlayerBuffs()
-    if API.AreAurasRestricted() then return nil end
-    local ok, result = pcall(function()
-        local list = {}
-        for index = 1, MAX_AURAS do
-            local aura = C_UnitAuras.GetAuraDataByIndex("player", index, "HELPFUL")
-            if not aura then break end
-            if not (IsSecret(aura.name) or IsSecret(aura.spellId)) then
-                list[#list + 1] = string.format("%s %s", tostring(aura.name), tostring(aura.spellId))
-            end
-        end
-        return list
-    end)
-    return ok and result or nil
-end
-
+------------------------------------------------------------------------
+-- Items and bags (bag-derived counts are cached until the bags change)
+------------------------------------------------------------------------
 -- Total count of the given items in your bags.
 function API.CountItems(itemIDs)
     local total = 0
@@ -405,27 +499,131 @@ function API.GetSkillRank(skillLineID)
     return (ok and info and info.rank) or 0
 end
 
--- The Legacy perk "Reagent Economy" removes vendor reagents from class abilities.
-local REAGENT_ECONOMY_SPELL_ID = 1262650
+-- Backpack + equipped bags (and the reagent bag, if the client has one).
+function API.NumBags()
+    return NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
+end
+
+-- Bumped on every bag change; modules cache bag scans per generation.
+local bagGeneration = 0
+function API.GetBagGeneration()
+    return bagGeneration
+end
+
+local itemDataPending = false -- the last bag scan met an item whose data hadn't loaded
+
+-- Calls fn(itemID, stackCount) for every item in your bags.
+function API.ForEachBagItem(fn)
+    for bag = 0, API.NumBags() do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID then
+                if C_Item.GetItemInfo(info.itemID) == nil then itemDataPending = true end -- also requests it
+                fn(info.itemID, info.stackCount or 1)
+            end
+        end
+    end
+end
+
+-- GET_ITEM_INFO_RECEIVED: rescan the bags only if the last scan met an item whose
+-- data was still loading (early after login). Returns false when nothing changed.
+function API.OnItemInfoReceived()
+    if not itemDataPending then return false end
+    itemDataPending = false
+    API.InvalidateBags()
+    return true
+end
+
+-- Free slots for loot: the backpack and bags that take any item (not quivers,
+-- ammo pouches, soul bags, or the reagent bag).
+function API.CountFreeBagSlots()
+    local free = 0
+    for bag = 0, (NUM_BAG_SLOTS or 4) do
+        local slots, bagFamily = C_Container.GetContainerNumFreeSlots(bag)
+        if slots and (bagFamily == nil or bagFamily == 0) then
+            free = free + slots
+        end
+    end
+    return free
+end
+
+local DRINK = API.SpellFamily("Drink", { 430, 431, 432, 1133, 1135, 1137 }, { englishNames = { "Drink" } })
+local drinkItems = {} -- [itemID] = bool, once the item's data has loaded
+
+-- True for drinks (water): their use effect is the "Drink" spell.
+function API.IsDrinkItem(itemID)
+    local known = drinkItems[itemID]
+    if known ~= nil then return known end
+    local spellName, spellID = C_Item.GetItemSpell(itemID)
+    local isDrink = (spellName ~= nil or spellID ~= nil) and API.FamilyMatches(DRINK, spellName, spellID)
+    -- Before the item's data has loaded GetItemSpell can come back empty, so a
+    -- "no" is only remembered for items the client knows.
+    if isDrink or C_Item.GetItemInfo(itemID) ~= nil then
+        drinkItems[itemID] = isDrink
+    end
+    return isDrink
+end
+
+------------------------------------------------------------------------
+-- Hunter pets (C_PetInfo, with the classic globals as a fallback)
+------------------------------------------------------------------------
+local function PetInfoFunction(name)
+    return (C_PetInfo and C_PetInfo[name]) or _G[name]
+end
+
+-- 1 = unhappy, 2 = content, 3 = happy; nil when unavailable.
+function API.GetPetHappiness()
+    local fn = PetInfoFunction("GetPetHappiness")
+    if not fn then return nil end
+    local ok, happiness = pcall(fn)
+    if not ok or IsSecret(happiness) then return nil end
+    return happiness
+end
+
+function API.GetPetFoodTypes()
+    local fn = PetInfoFunction("GetPetFoodTypes")
+    if not fn then return nil end
+    local ok, foodTypes = pcall(fn)
+    return ok and type(foodTypes) == "table" and foodTypes or nil
+end
+
+function API.CanPetEatItem(itemID)
+    local fn = PetInfoFunction("CanPetEatItem")
+    if not fn then return false end
+    local ok, canEat = pcall(fn, itemID)
+    return ok and canEat == true
+end
+
+------------------------------------------------------------------------
+-- Reagents and Forever's Legacy perks
+------------------------------------------------------------------------
+-- Legacy perks that remove the vendor reagents of class abilities. Add new perk
+-- spell IDs here; /prepped debug lists the perks a character has bought.
+local REAGENT_FREE_PERKS = {
+    [1262650] = "Reagent Economy",
+}
 local LEGACY_CONSTANTS = Constants and Constants.LegacyConsts
 local LEGACY_TREE_IDS = {
     (LEGACY_CONSTANTS and LEGACY_CONSTANTS.LEGACY_TREE_PROFESSIONS_ID) or 1187,
     (LEGACY_CONSTANTS and LEGACY_CONSTANTS.LEGACY_TREE_ADVENTURE_ID) or 1188,
     (LEGACY_CONSTANTS and LEGACY_CONSTANTS.LEGACY_TREE_PROGRESSION_ID) or 1189,
 }
-local REAGENT_ECONOMY_CACHE_TTL = 30
+local REAGENT_ECONOMY_CACHE_TTL = 60 -- safety net; TRAIT_CONFIG_UPDATED invalidates it
 local reagentEconomy, reagentEconomySource, reagentEconomyTime = nil, nil, 0
 
-local function LegacyTreesHavePerk(spellID)
+-- Calls fn(spellID, overriddenSpellID, ranksPurchased) for each Legacy perk you
+-- bought, until fn returns true. Returns true if it did.
+local function ForEachLegacyPerk(fn)
     for _, treeID in ipairs(LEGACY_TREE_IDS) do
         local configID = C_Traits.GetConfigIDByTreeID(treeID)
         if configID then
             for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID) or {}) do
                 local node = C_Traits.GetNodeInfo(configID, nodeID)
-                if node and (node.ranksPurchased or 0) > 0 and node.activeEntry then
+                local ranks = (node and node.ranksPurchased) or 0
+                if ranks > 0 and node.activeEntry then
                     local entry = C_Traits.GetEntryInfo(configID, node.activeEntry.entryID)
                     local definition = entry and entry.definitionID and C_Traits.GetDefinitionInfo(entry.definitionID)
-                    if definition and (definition.spellID == spellID or definition.overriddenSpellID == spellID) then
+                    if definition and fn(definition.spellID, definition.overriddenSpellID, ranks) then
                         return true
                     end
                 end
@@ -433,6 +631,10 @@ local function LegacyTreesHavePerk(spellID)
         end
     end
     return false
+end
+
+local function IsReagentFreePerk(spellID, overriddenSpellID)
+    return REAGENT_FREE_PERKS[spellID] ~= nil or REAGENT_FREE_PERKS[overriddenSpellID] ~= nil
 end
 
 -- Returns hasPerk, howItWasDetected
@@ -443,15 +645,24 @@ function API.HasReagentEconomy()
     end
 
     local has, source = false, nil
-    if C_SpellBook.IsSpellKnown(REAGENT_ECONOMY_SPELL_ID) then
-        has, source = true, "known spell"
-    else
-        local ok, inTree = pcall(LegacyTreesHavePerk, REAGENT_ECONOMY_SPELL_ID)
+    for spellID in pairs(REAGENT_FREE_PERKS) do
+        if C_SpellBook.IsSpellKnown(spellID) then
+            has, source = true, "known spell"
+            break
+        end
+    end
+    if not has then
+        local ok, inTree = pcall(ForEachLegacyPerk, IsReagentFreePerk)
         if ok and inTree then
             has, source = true, "Legacy tree"
         elseif not API.AreAurasRestricted() then
-            local auraOk, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, REAGENT_ECONOMY_SPELL_ID)
-            if auraOk and aura then has, source = true, "aura" end
+            for spellID in pairs(REAGENT_FREE_PERKS) do
+                local auraOk, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, spellID)
+                if auraOk and aura then
+                    has, source = true, "aura"
+                    break
+                end
+            end
         end
     end
 
@@ -459,26 +670,72 @@ function API.HasReagentEconomy()
     return has, source
 end
 
--- Backpack + equipped bags (and the reagent bag, if the client has one).
-function API.NumBags()
-    return NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
+-- "Name id" (with "xN" for several ranks) per Legacy perk you bought, for
+-- /prepped debug; nil when the Legacy trees can't be read.
+function API.GetLegacyPerks()
+    local list = {}
+    local ok = pcall(ForEachLegacyPerk, function(spellID, overriddenSpellID, ranks)
+        local id = spellID or overriddenSpellID
+        if id then
+            local text = string.format("%s %d", C_Spell.GetSpellName(id) or "?", id)
+            if ranks > 1 then text = text .. " x" .. ranks end
+            list[#list + 1] = text
+        end
+    end)
+    return ok and list or nil
 end
 
-local DRINK = API.SpellFamily("Drink", { 430, 431, 432, 1133, 1135, 1137 }, { englishNames = { "Drink" } })
+-- Spells seen working without their reagent (see API.ReagentNeeded).
+local reagentFreeSpells = {}
 
--- True for drinks (water): their use effect is the "Drink" spell.
-function API.IsDrinkItem(itemID)
-    local spellName, spellID = C_Item.GetItemSpell(itemID)
-    if spellName == nil and spellID == nil then return false end
-    return API.FamilyMatches(DRINK, spellName, spellID)
+-- isUsable, or nil when the client won't say (secret value, no API).
+local function IsSpellUsable(spellID)
+    local fn = (C_Spell and C_Spell.IsSpellUsable) or IsUsableSpell
+    if not fn then return nil end
+    local ok, usable = pcall(fn, spellID)
+    if not ok or IsSecret(usable) then return nil end
+    return usable == true
+end
+
+-- Whether the reagent itemID is still needed for the learned spellIDs that use it.
+-- Not needed when:
+--   * soldByVendors and a Legacy perk such as Reagent Economy removes vendor reagents, or
+--   * one of the spells is castable while you carry none of the reagent. A spell
+--     that needs a reagent isn't usable without it, so this catches any perk or
+--     talent Prepped doesn't know about yet. It can only be seen once you run
+--     out, and is then remembered until your talents or Legacy perks change.
+function API.ReagentNeeded(itemID, spellIDs, soldByVendors)
+    if soldByVendors and API.HasReagentEconomy() then return false end
+    for _, spellID in ipairs(spellIDs) do
+        if reagentFreeSpells[spellID] then return false end
+    end
+    if C_Item.GetItemCount(itemID) == 0 and not InCombat() and not UnitIsDeadOrGhost("player") then
+        for _, spellID in ipairs(spellIDs) do
+            if IsSpellUsable(spellID) then
+                reagentFreeSpells[spellID] = true
+                return false
+            end
+        end
+    end
+    return true
+end
+
+-- "Name id" per spell seen working without its reagent, for /prepped debug.
+function API.GetReagentFreeSpells()
+    local list = {}
+    for spellID in pairs(reagentFreeSpells) do
+        list[#list + 1] = string.format("%s %d", C_Spell.GetSpellName(spellID) or "?", spellID)
+    end
+    table.sort(list)
+    return list
 end
 
 ------------------------------------------------------------------------
--- Talent trees (cached; rebuilt on talent events and every few seconds)
+-- Talent trees (cached; rebuilt after talent events)
 ------------------------------------------------------------------------
 -- Forever: one Traits tree per class, split into groups (Holy/Prot/Ret, ...),
 -- returned in the classic tree order (confirmed in game: Arcane/Fire/Frost).
-local TALENT_CACHE_TTL = 5
+local TALENT_CACHE_TTL = 30 -- safety net; talent events invalidate it
 local talentCache, talentCacheTime = nil, 0
 
 local function ReadTalentTrees()
@@ -553,10 +810,34 @@ end
 ------------------------------------------------------------------------
 -- Cache invalidation and events
 ------------------------------------------------------------------------
-function API.InvalidateCaches()
+-- Spells learned or changed (SPELLS_CHANGED, LEARNED_SPELL_IN_SKILL_LINE).
+function API.InvalidateSpells()
     spellCache = nil
+    reagentEconomy = nil
+end
+
+-- Talents, specs or Legacy perks changed (TRAIT_CONFIG_UPDATED, ...).
+function API.InvalidateTalents()
     talentCache = nil
     reagentEconomy = nil
+    Wipe(reagentFreeSpells)
+end
+
+-- Buffs changed, or what Blizzard hides from addons did (combat, encounters).
+function API.InvalidateAuras()
+    auraSnapshotOK = nil
+end
+
+-- Bag contents changed (also when the pet changes: what counts as pet food).
+function API.InvalidateBags()
+    bagGeneration = bagGeneration + 1
+end
+
+function API.InvalidateCaches()
+    API.InvalidateSpells()
+    API.InvalidateTalents()
+    API.InvalidateAuras()
+    API.InvalidateBags()
 end
 
 local function IsEventValid(event)
@@ -624,8 +905,7 @@ function API.GetAuraFamiliesForClass(classToken)
     local result = {}
     for _, family in ipairs(families) do
         if family.isAura and family.class == classToken then
-            local ids = API.GetKnownSpellIDsMatching(function(name, id) return API.FamilyMatches(family, name, id) end)
-            result[#result + 1] = { label = family.label, knownIDs = ids }
+            result[#result + 1] = { label = family.label, knownIDs = API.GetKnownFamilyIDs(family) }
         end
     end
     return result

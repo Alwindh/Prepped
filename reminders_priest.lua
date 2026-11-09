@@ -4,7 +4,7 @@
 local _, ns = ...
 local API = ns.API
 
-local PriestReminders = {}
+local PriestReminders = { class = "PRIEST" }
 
 local FORTITUDE = API.SpellFamily("Power Word: Fortitude", { 1243, 1244, 1245, 2791, 10937, 10938 }, { class = "PRIEST", aura = true })
 local PRAYER_OF_FORTITUDE = API.SpellFamily("Prayer of Fortitude", { 21562, 21564 }, { class = "PRIEST", aura = true })
@@ -28,12 +28,14 @@ local priestReminders = {
         message = "Missing Power Word: Fortitude!",
         messageLow = "Fortitude expiring (%ss left)",
         mustNotRest = true,
+        noTravel = true,
     },
     {
         id = "priest_inner_fire",
         message = "Missing Inner Fire!",
         messageLow = "Inner Fire expiring (%ss left)",
         mustNotRest = true,
+        noTravel = true,
     },
     { id = "priest_candles", mustRest = true },
 }
@@ -41,24 +43,24 @@ local priestReminders = {
 local checks = {}
 
 function checks.priest_fortitude(config)
-    if IsMounted() then return nil end
     if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(FORTITUDE)) then return nil end
     return Prepped:CheckTimedBuff(config.id, IsFortitudeBuff, config.message, config.messageLow)
 end
 
 function checks.priest_inner_fire(config)
-    if IsMounted() or not API.KnowsFamily(INNER_FIRE) then return nil end
+    if not API.KnowsFamily(INNER_FIRE) then return nil end
     return Prepped:CheckTimedBuff(config.id, IsInnerFire, config.message, config.messageLow)
 end
 
--- Vendor reagent: not needed with the Legacy perk "Reagent Economy"
+-- Vendor reagent: hidden when not needed (Legacy perk "Reagent Economy", ...)
 function checks.priest_candles(config)
     if API.HasReagentEconomy() then return nil end
     if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(PRAYER_OF_SPIRIT)
         or API.KnowsFamily(PRAYER_OF_SHADOW_PROTECTION)) then
         return nil
     end
-    local count, name = API.CountReagentForKnownSpell(CANDLES)
+    local count, name, option = API.CountReagentForKnownSpell(CANDLES)
+    if option and not API.ReagentNeeded(option.item, option.spells, true) then return nil end
     if count < Prepped:GetRuleThreshold(config.id) then
         return string.format("Low on %s (%d left)", name or "candles", count), { name = name or "candles", count = count }
     end
@@ -66,8 +68,6 @@ function checks.priest_candles(config)
 end
 
 function PriestReminders.CheckReminders()
-    local _, playerClass = UnitClass("player")
-    if playerClass ~= "PRIEST" then return end
     Prepped:RunReminders(priestReminders, checks)
 end
 
