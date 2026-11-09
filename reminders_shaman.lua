@@ -17,7 +17,7 @@ local IsShield = API.Matcher(SHIELDS)
 
 -- Totems still need their element's totem item in your bags in Forever
 -- (quest rewards at level 4, 10, 20 and 30). An element counts once you know
--- any of its totems.
+-- any of its totems. Forever has no Fire Nova Totem or Tranquil Air Totem.
 local TOTEM_ELEMENTS = {
     { name = "Earth Totem", item = 5175, family = API.SpellFamily("Earth totems", {
         8071, 8154, 8155, 10406, 10407, 10408, -- Stoneskin Totem
@@ -28,7 +28,6 @@ local TOTEM_ELEMENTS = {
     }, { class = "SHAMAN" }) },
     { name = "Fire Totem", item = 5176, family = API.SpellFamily("Fire totems", {
         3599, 6363, 6364, 6365, 10437, 10438,  -- Searing Totem
-        1535, 8498, 8499, 11314, 11315,        -- Fire Nova Totem
         8181, 10478, 10479,                    -- Frost Resistance Totem
         8190, 10585, 10586, 10587,             -- Magma Totem
         8227, 8249, 10526, 16387,              -- Flametongue Totem
@@ -48,7 +47,6 @@ local TOTEM_ELEMENTS = {
         8835, 10627, 25359,                    -- Grace of Air Totem
         15107, 15111, 15112,                   -- Windwall Totem
         6495,                                  -- Sentry Totem
-        25908,                                 -- Tranquil Air Totem
     }, { class = "SHAMAN" }) },
 }
 

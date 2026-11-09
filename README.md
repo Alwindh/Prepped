@@ -21,7 +21,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 ### Universal (All Classes)
 - **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
 - **Water Reminder**: Reminds mana users (also druids in Bear or Cat Form) to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
-- **Missing Food Buff**: While leveling, reminds you to keep a food buff (**Well Fed**) up when you're not resting and not in combat. In Forever, cooked food also gives +5% experience from kills. Off at max level or with experience turned off; optional early warning before it runs out.
+- **Missing Food Buff**: While leveling, reminds you to keep a food buff (**Well Fed**) up when you're not resting, not in combat and not mounted (or in Travel Form / Ghost Wolf). In Forever, cooked food also gives +5% experience from kills. Off at max level or with experience turned off; optional early warning before it runs out.
 
 ### Druid
 - **Missing Mark of the Wild**: Alerts you when neither Mark of the Wild nor Gift of the Wild is on you (not while resting, mounted or in Travel/Aquatic/Flight Form).

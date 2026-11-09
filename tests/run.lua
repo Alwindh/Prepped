@@ -306,6 +306,16 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("max level: no food reminder", { class = "WARRIOR", level = 60, buffs = {} }, {}, { "Missing food buff (Well Fed)" })
     R("experience turned off: no food reminder", { class = "WARRIOR", level = 30, xpDisabled = true, buffs = {} },
         {}, { "Missing food buff (Well Fed)" })
+    R("leveling: Forever's Well Fed counts", { class = "WARRIOR", level = 30, buffs = { { spellId = 1248406, expires = NOW + 900 } } },
+        {}, { "Missing food buff (Well Fed)" })
+    R("leveling: no food reminder while mounted", { class = "WARRIOR", level = 30, mounted = true, buffs = {} },
+        {}, { "Missing food buff (Well Fed)" })
+    R("leveling: no food reminder in Travel Form", { class = "DRUID", level = 30, form = 3, buffs = {} },
+        {}, { "Missing food buff (Well Fed)" })
+    R("leveling: no food reminder in Ghost Wolf", { class = "SHAMAN", level = 30, form = 16, buffs = {} },
+        {}, { "Missing food buff (Well Fed)" })
+    R("leveling: food reminder in Cat Form", { class = "DRUID", level = 30, form = 1, buffs = {} },
+        { "Missing food buff (Well Fed)" })
 
     -- Everyone
     R("mana user: low water (incl. reagent bag) + repair", { class = "PRIEST", spells = {}, resting = true, level = 40,
@@ -327,12 +337,6 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("one secret buff: could be the blessing", { class = "PALADIN", spells = pal, secretBuffs = { [19740] = true },
         buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, {}, { "No Blessing Active!", "No Aura Active!" })
 end
-
--- Forever's "Well Fed XP Boost" is recognised by its English name until its spell ID is known
-Run("enUS leveling: Well Fed XP Boost counts", { class = "WARRIOR", level = 30, time = NOW,
-    buffs = { { spellId = 900003, expires = NOW + 600 } } }, {}, { "Missing food buff (Well Fed)" })
-Run("deDE leveling: Well Fed XP Boost not recognised yet", { class = "WARRIOR", level = 30, time = NOW, locale = "deDE",
-    buffs = { { spellId = 900003, expires = NOW + 600 } } }, { "Missing food buff (Well Fed)" })
 
 -- Water Shield (new in Forever) is recognised by its English name until its spell ID is known
 Run("enUS shaman: Water Shield recognised by name", { class = "SHAMAN", spells = { 324, 900001 }, time = NOW,
@@ -382,10 +386,10 @@ end
 -- The buffs on you are listed with their IDs (to find Forever-only IDs), unless they're hidden
 do
     local env = Mock.BuildEnv({ class = "SHAMAN", spells = { 324 }, time = NOW,
-        buffs = { { spellId = 900001, expires = NOW + 500 }, { spellId = 900003, expires = NOW + 600 } } })
+        buffs = { { spellId = 900001, expires = NOW + 500 }, { spellId = 1248406, expires = NOW + 600 } } })
     LoadAddon(env)
     pcall(env.SlashCmdList.PREPPED, "debug")
-    Check("debug: buffs on you with IDs", DebugValue(env, "Buffs on you") == "Water Shield 900001, Well Fed XP Boost 900003",
+    Check("debug: buffs on you with IDs", DebugValue(env, "Buffs on you") == "Water Shield 900001, Well Fed 1248406",
         DebugValue(env, "Buffs on you"))
     local hidden = Mock.BuildEnv({ class = "SHAMAN", spells = { 324 }, time = NOW, inCombat = true, aurasSecret = true,
         buffs = { { spellId = 900001, expires = NOW + 500 } } })
