@@ -25,15 +25,6 @@ local GIFT_REAGENTS = {
     { spells = { 21849 }, item = 17021, name = "Wild Berries" },
 }
 
--- Travel, Aquatic and Flight Form: like being mounted
-local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
-
-local function IsTraveling()
-    if IsMounted() then return true end
-    local formID = GetShapeshiftFormID()
-    return formID ~= nil and TRAVEL_FORMS[formID] == true
-end
-
 local druidReminders = {
     {
         id = "druid_mark",
@@ -61,7 +52,7 @@ local checks = {
 }
 
 function checks.druid_mark(config)
-    if IsTraveling() then return nil end
+    if API.IsTraveling() then return nil end
     if not (API.KnowsFamily(MARK_OF_THE_WILD) or API.KnowsFamily(GIFT_OF_THE_WILD)) then return nil end
     return Prepped:CheckTimedBuff(config.id, IsMarkOfTheWild, config.message, config.messageLow)
 end

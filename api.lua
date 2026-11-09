@@ -339,6 +339,15 @@ function API.IsLeveling()
     return UnitLevel("player") < maxLevel and not IsXPUserDisabled()
 end
 
+-- On a mount or in a travel shape: druid Travel (3), Aquatic (4) or Flight
+-- Form (27), shaman Ghost Wolf (16).
+local TRAVEL_FORMS = { [3] = true, [4] = true, [16] = true, [27] = true }
+function API.IsTraveling()
+    if IsMounted() then return true end
+    local formID = GetShapeshiftFormID()
+    return formID ~= nil and TRAVEL_FORMS[formID] == true
+end
+
 -- "Name id" for each buff on you, for /prepped debug (nil while buffs are hidden).
 function API.ListPlayerBuffs()
     if API.AreAurasRestricted() then return nil end

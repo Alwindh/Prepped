@@ -47,8 +47,7 @@ local function IsSecretValue(v) return type(v) == "table" and getmetatable(v) ==
 local SPELLS = {}
 local function def(name, ...) for _, id in ipairs({ ... }) do SPELLS[id] = name end end
 def("Drink", 430, 431, 432, 1133, 1135, 1137)
-def("Well Fed", 19705, 19706, 19708, 19709, 19710, 19711, 24799)
-def("Well Fed XP Boost", 900003) -- Forever's XP food buff; its real spell ID isn't known yet
+def("Well Fed", 1248406, 19705, 19706, 19708, 19709, 19710, 19711, 24799) -- 1248406: Forever's cooked food
 -- Hunter
 def("Tame Beast", 1515)
 def("Aspect of the Hawk", 13165, 14318, 14319, 14320, 14321, 14322, 25296)
@@ -87,14 +86,14 @@ def("Stoneskin Totem", 8071, 8154, 8155, 10406, 10407, 10408); def("Earthbind To
 def("Stoneclaw Totem", 5730, 6390, 6391, 6392, 10427, 10428); def("Strength of Earth Totem", 8075, 8160, 8161, 10442, 25361)
 def("Tremor Totem", 8143)
 def("Searing Totem", 3599, 6363, 6364, 6365, 10437, 10438, 900002) -- 900002: a rank Prepped doesn't list
-def("Fire Nova Totem", 1535, 8498, 8499, 11314, 11315); def("Frost Resistance Totem", 8181, 10478, 10479)
+def("Frost Resistance Totem", 8181, 10478, 10479) -- Forever has no Fire Nova Totem
 def("Magma Totem", 8190, 10585, 10586, 10587); def("Flametongue Totem", 8227, 8249, 10526, 16387)
 def("Healing Stream Totem", 5394, 6375, 6377, 10462, 10463); def("Mana Spring Totem", 5675, 10495, 10496, 10497)
 def("Poison Cleansing Totem", 8166); def("Disease Cleansing Totem", 8170); def("Fire Resistance Totem", 8184, 10537, 10538)
 def("Mana Tide Totem", 16190, 17354, 17359)
 def("Grounding Totem", 8177); def("Nature Resistance Totem", 10595, 10600, 10601); def("Windfury Totem", 8512, 10613, 10614)
 def("Grace of Air Totem", 8835, 10627, 25359); def("Windwall Totem", 15107, 15111, 15112); def("Sentry Totem", 6495)
-def("Tranquil Air Totem", 25908)
+-- Forever has no Tranquil Air Totem
 -- Warrior
 def("Battle Shout", 6673, 5242, 6192, 11549, 11550, 11551, 25289)
 -- Warlock

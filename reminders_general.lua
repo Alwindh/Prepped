@@ -4,11 +4,13 @@ local API = ns.API
 
 local GeneralReminders = {}
 
--- Food buffs are called "Well Fed"; Forever's cooked food also gives "Well Fed
--- XP Boost" (+5% experience from kills). The IDs give the buff's name in any
--- client language; English clients also match every buff starting with "Well Fed".
-local WELL_FED = API.SpellFamily("Well Fed", { 19705, 19706, 19708, 19709, 19710, 19711, 24799 },
-    { aura = true, englishPattern = "^Well Fed" })
+-- Every food buff is called "Well Fed" (they differ in their extra effect), and in
+-- Forever cooked food's Well Fed also gives +5% experience from kills. Matching the
+-- name these IDs have covers every food in any client language.
+local WELL_FED = API.SpellFamily("Well Fed", {
+    1248406,                                         -- Well Fed (Forever cooked food)
+    19705, 19706, 19708, 19709, 19710, 19711, 24799, -- Well Fed (older foods)
+}, { aura = true })
 local IsFoodBuff = API.Matcher(WELL_FED)
 
 local generalReminders = {
@@ -59,8 +61,9 @@ function checks.general_water(config)
     return nil
 end
 
+-- While leveling; not while mounted or in a travel form.
 function checks.general_food(config)
-    if not API.IsLeveling() then return nil end
+    if API.IsTraveling() or not API.IsLeveling() then return nil end
     return Prepped:CheckTimedBuff(config.id, IsFoodBuff, config.message, config.messageLow)
 end
 
