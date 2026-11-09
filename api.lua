@@ -332,6 +332,30 @@ end
 ------------------------------------------------------------------------
 -- Skills, reagents, bags, consumables
 ------------------------------------------------------------------------
+-- Still gaining levels: below the max level (as Forever's own UI works it out)
+-- and experience not switched off.
+function API.IsLeveling()
+    local maxLevel = math.min(GetMaxLevelForPlayerExpansion() or 60, GetMaxPlayerLevel() or 60)
+    return UnitLevel("player") < maxLevel and not IsXPUserDisabled()
+end
+
+-- "Name id" for each buff on you, for /prepped debug (nil while buffs are hidden).
+function API.ListPlayerBuffs()
+    if API.AreAurasRestricted() then return nil end
+    local ok, result = pcall(function()
+        local list = {}
+        for index = 1, MAX_AURAS do
+            local aura = C_UnitAuras.GetAuraDataByIndex("player", index, "HELPFUL")
+            if not aura then break end
+            if not (IsSecret(aura.name) or IsSecret(aura.spellId)) then
+                list[#list + 1] = string.format("%s %s", tostring(aura.name), tostring(aura.spellId))
+            end
+        end
+        return list
+    end)
+    return ok and result or nil
+end
+
 -- Total count of the given items in your bags.
 function API.CountItems(itemIDs)
     local total = 0

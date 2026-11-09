@@ -8,7 +8,7 @@
 
 Prepped's options live in the game's own settings: **Options → AddOns → Prepped**. Open them with `/prepped` or from the AddOns menu on the minimap.
 
-- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water and repair reminders, and **Reset All Settings**.
+- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water, repair and food buff reminders, and **Reset All Settings**.
 - **Appearance**: font size, minimum bar width, text color, background color and background opacity.
 - **One page per class** (Druid, Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warlock, Warrior): every reminder can be switched on or off. Stock reminders have a slider for the amount to warn at; buff reminders have an extra **Warn when expiring** option with a seconds slider.
 
@@ -21,6 +21,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 ### Universal (All Classes)
 - **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
 - **Water Reminder**: Reminds mana users (also druids in Bear or Cat Form) to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
+- **Missing Food Buff**: While leveling, reminds you to keep a food buff (**Well Fed**) up when you're not resting and not in combat. In Forever, cooked food also gives +5% experience from kills. Off at max level or with experience turned off; optional early warning before it runs out.
 
 ### Druid
 - **Missing Mark of the Wild**: Alerts you when neither Mark of the Wild nor Gift of the Wild is on you (not while resting, mounted or in Travel/Aquatic/Flight Form).
@@ -70,6 +71,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
 
 ### Shaman
+- **Missing Totem Items**: Totems in Forever still need their element's totem item in your bags. Prepped warns you (out of combat) when the **Earth, Fire, Water or Air Totem** for totems you know is missing, for example after leaving it in the bank.
 - **Missing Shield**: Alerts if Lightning Shield (or Water Shield) is missing. Water Shield is new in Forever and is only recognised on English clients until its spell ID is known.
 - **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
   - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware. Sharpening stones and oils don't count as an imbue.*
@@ -109,7 +111,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Reagent Economy perk**: If you have this Legacy perk, Prepped detects it and hides the reminders for vendor reagents (Arcane Powder, Runes, Ankhs, Symbols, Flash Powder, candles, Rebirth seeds, Wild Berries/Thornroot, …). Soul Shards and Blinding Powder aren't sold by vendors, so those reminders stay.
 - **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English). The exception is Water Shield, until its Forever spell ID is known.
 - **Spec detection** (Protection Paladin, Enhancement Shaman) uses the points spent in each talent tree.
-- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, and spells Prepped only recognises by name (their IDs can then be added).
+- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, the buffs on you with their spell IDs, which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, and spells Prepped only recognises by name (their IDs can then be added).
 
 ---
 

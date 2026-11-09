@@ -1,18 +1,25 @@
--- General reminders (Multi-class)
+-- General reminders (all classes)
 local _, ns = ...
 local API = ns.API
 
 local GeneralReminders = {}
 
-local generalRules = {
+-- Food buffs are called "Well Fed"; Forever's cooked food also gives "Well Fed
+-- XP Boost" (+5% experience from kills). The IDs give the buff's name in any
+-- client language; English clients also match every buff starting with "Well Fed".
+local WELL_FED = API.SpellFamily("Well Fed", { 19705, 19706, 19708, 19709, 19710, 19711, 24799 },
+    { aura = true, englishPattern = "^Well Fed" })
+local IsFoodBuff = API.Matcher(WELL_FED)
+
+local generalReminders = {
+    { id = "general_water", message = "Low on water (%s left)", mustRest = true },
     {
-        id = "general_water",
-        message = "Low on water (%s left)",
-        mustRest = true,
-        onlyMana = true,
-        checkWater = true,
-        minLevelConfig = "general_water_minlevel",
-    }
+        id = "general_food",
+        message = "Missing food buff (Well Fed)",
+        messageLow = "Food buff expiring (%ss left)",
+        mustNotRest = true,
+        outOfCombat = true,
+    },
 }
 
 local function GetWaterCount()
@@ -38,54 +45,27 @@ local function UsesMana()
     return maxMana > 0
 end
 
-function GeneralReminders.CheckReminders()
-    local isResting = IsResting()
+local checks = {}
 
-    for _, config in ipairs(generalRules) do
-        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
-            local trigger = true
-            local displayMessage = config.message
-            
-            if config.mustRest and not isResting then trigger = false end
-            
-            -- Mana Check
-            if config.onlyMana and not UsesMana() then trigger = false end
-
-            -- Min Level Check (if configured)
-            if trigger and config.minLevelConfig then
-                 local minLevel = Prepped:GetRuleThreshold(config.minLevelConfig, 10)
-                 if UnitLevel("player") < minLevel then trigger = false end
-            end
-
-            -- Mage Exception for Water
-            if trigger and config.id == "general_water" then
-                local _, class = UnitClass("player")
-                if class == "MAGE" then trigger = false end
-            end
-            
-            if trigger and config.checkWater then
-                local count = GetWaterCount()
-                local threshold = 0
-                if Prepped and Prepped.GetRuleThreshold then
-                     threshold = Prepped:GetRuleThreshold(config.id)
-                end
-                
-                if count >= threshold then 
-                    trigger = false 
-                else
-                    displayMessage = string.format(config.message, count)
-                end
-            end
-            
-            if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
-            end
-        end
+-- Mana users from the configured level on; mages conjure their own.
+function checks.general_water(config)
+    local _, class = UnitClass("player")
+    if class == "MAGE" or not UsesMana() then return nil end
+    if UnitLevel("player") < Prepped:GetRuleThreshold("general_water_minlevel", 10) then return nil end
+    local count = GetWaterCount()
+    if count < Prepped:GetRuleThreshold(config.id) then
+        return string.format(config.message, count)
     end
+    return nil
+end
+
+function checks.general_food(config)
+    if not API.IsLeveling() then return nil end
+    return Prepped:CheckTimedBuff(config.id, IsFoodBuff, config.message, config.messageLow)
+end
+
+function GeneralReminders.CheckReminders()
+    Prepped:RunReminders(generalReminders, checks)
 end
 
 if Prepped then
