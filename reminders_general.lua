@@ -24,6 +24,7 @@ local generalReminders = {
         messageLow = "Food buff expiring (%ss left)",
         mustNotRest = true,
         outOfCombat = true,
+        noTravel = true,
     },
     {
         id = "general_camp",
@@ -31,21 +32,26 @@ local generalReminders = {
         messageLow = "Camp Benefits expiring (%ss left)",
         mustNotRest = true,
         outOfCombat = true,
+        noTravel = true,
     },
 }
 
+-- Water = any item whose use effect is the "Drink" spell (any client language).
+-- Counted once per change of the bags, not on every check.
+local waterCount, waterBagGeneration = 0, nil
+
+local function AddWater(itemID, stackCount)
+    if API.IsDrinkItem(itemID) then waterCount = waterCount + stackCount end
+end
+
 local function GetWaterCount()
-    local count = 0
-    for bag = 0, API.NumBags() do
-        for slot = 1, C_Container.GetContainerNumSlots(bag) do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            -- Water = any item whose use effect is the "Drink" spell (any client language)
-            if info and API.IsDrinkItem(info.itemID) then
-                count = count + info.stackCount
-            end
-        end
+    local generation = API.GetBagGeneration()
+    if waterBagGeneration ~= generation then
+        waterCount = 0
+        API.ForEachBagItem(AddWater)
+        waterBagGeneration = generation
     end
-    return count
+    return waterCount
 end
 
 -- Mana users, including druids in a form that uses rage or energy.
@@ -61,9 +67,8 @@ local checks = {}
 
 -- Mana users from the configured level on; mages conjure their own.
 function checks.general_water(config)
-    local _, class = UnitClass("player")
-    if class == "MAGE" or not UsesMana() then return nil end
-    if UnitLevel("player") < Prepped:GetRuleThreshold("general_water_minlevel", 10) then return nil end
+    if Prepped:GetPlayerClass() == "MAGE" or not UsesMana() then return nil end
+    if UnitLevel("player") < Prepped:GetRuleThreshold("general_water_minlevel") then return nil end
     local count = GetWaterCount()
     if count < Prepped:GetRuleThreshold(config.id) then
         return string.format(config.message, count), count
@@ -71,10 +76,10 @@ function checks.general_water(config)
     return nil
 end
 
--- Buffs worth keeping up while leveling; not while mounted or in a travel form.
+-- Buffs worth keeping up while leveling.
 local function LevelingBuff(matcher)
     return function(config)
-        if API.IsTraveling() or not API.IsLeveling() then return nil end
+        if not API.IsLeveling() then return nil end
         return Prepped:CheckTimedBuff(config.id, matcher, config.message, config.messageLow)
     end
 end

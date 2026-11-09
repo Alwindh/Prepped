@@ -30,8 +30,8 @@ local function Round(value)
     return math.floor(value + 0.5)
 end
 
-local UNIT_FORMATS = { count = "%d", seconds = "%ds", percent = "%d%%", level = "%d" }
-local SLIDER_LABELS = { count = "Warn below", percent = "Warn below", level = "From level" }
+local UNIT_FORMATS = { count = "%d", seconds = "%ds", percent = "%d%%", level = "%d", minutes = "%d min" }
+local SLIDER_LABELS = { count = "Warn below", percent = "Warn below", level = "From level", minutes = "Minutes" }
 
 local function SliderOptions(rule, unit)
     local range = rule.range
@@ -68,7 +68,7 @@ local function AddRule(category, layout, rule)
         return
     end
 
-    local enabled = Proxy(category, id, Settings.VarType.Boolean, rule.label, true,
+    local enabled = Proxy(category, id, Settings.VarType.Boolean, rule.label, rule.defaultEnabled ~= false,
         function() return Prepped:GetRuleSetting(id) end,
         function(value)
             Prepped:SetRuleEnabled(id, value)
@@ -164,14 +164,17 @@ local function BuildGeneralPage(category, layout)
     Settings.CreateCheckbox(category, accountWide, Prepped:GetRule("general_account_wide").description)
 
     AddRule(category, layout, Prepped:GetRule("general_welcome"))
+    AddRule(category, layout, Prepped:GetRule("general_sound"))
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Supplies"))
     AddRule(category, layout, Prepped:GetRule("general_water"))
     AddRule(category, layout, Prepped:GetRule("general_water_minlevel"))
     AddRule(category, layout, Prepped:GetRule("general_repair"))
+    AddRule(category, layout, Prepped:GetRule("general_bag_space"))
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Groups"))
     AddRule(category, layout, Prepped:GetRule("general_group_check"))
+    AddRule(category, layout, Prepped:GetRule("general_ready_check"))
     AddRule(category, layout, Prepped:GetRule("general_group_announce"))
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Leveling"))

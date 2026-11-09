@@ -20,7 +20,10 @@
 --   ammoCount, rangedCount, rangedDurability, headDurability
 --   aurasSecret              buff data hidden (combat): aura scans error, like on Forever
 --   secretBuffs, neverSecret { [spellID] = true }: individually hidden / never-hidden buffs
---   reagentEconomy           the Legacy perk is learned
+--   reagentEconomy           the Legacy perk is learned (vendor reagents aren't needed)
+--   reagentFreeSpells        { [spellID] = true }: castable without its reagent (a perk Prepped doesn't know)
+--   freeBagSlots             free slots in the backpack (default: 16 minus the items in bag 0)
+--   uncachedItems            { [itemID] = true }: item data not loaded yet (GetItemInfo/GetItemSpell return nil)
 --   missingSpellIDs          { [spellID] = true } the client doesn't know
 --   breakSettings            the Settings API errors
 
@@ -115,6 +118,25 @@ def("Rebirth", 20484, 20739, 20742, 20747, 20748, 888888) -- 888888: a Rebirth r
 def("Teleport: Moonglade", 18960)
 -- Legacy perks
 def("Reagent Economy", 1262650); def("Some Other Perk", 999999)
+
+-- The reagent each spell needs: a spell is usable (C_Spell.IsSpellUsable) only
+-- with its reagent in the bags, unless a perk removes it. Reincarnation is only
+-- usable while dead.
+local REAGENTS = {}
+local function reagent(item, vendor, ...) for _, id in ipairs({ ... }) do REAGENTS[id] = { item = item, vendor = vendor } end end
+reagent(17020, true, 23028)                                       -- Arcane Powder: Arcane Brilliance
+reagent(17031, true, 3561, 3562, 3563, 3565, 3566, 3567, 777777)  -- Rune of Teleportation
+reagent(17032, true, 10059, 11416, 11417, 11418, 11419, 11420)    -- Rune of Portals
+reagent(17030, true, 20608)                                       -- Ankh: Reincarnation
+reagent(17058, true, 546); reagent(17057, true, 131)              -- Fish Oil, Fish Scales
+reagent(21177, true, 25782, 25894, 25898); reagent(17033, true, 19752) -- Symbols of Kings / Divinity
+reagent(17028, true, 21562); reagent(17029, true, 21564, 27681, 27683) -- Holy / Sacred Candles
+reagent(17034, true, 20484); reagent(17035, true, 20739); reagent(17036, true, 20742)
+reagent(17037, true, 20747); reagent(17038, true, 20748, 888888)  -- Rebirth seeds
+reagent(17021, true, 21849); reagent(17026, true, 21850)          -- Wild Berries / Thornroot
+reagent(5140, true, 1856, 1857)                                   -- Flash Powder: Vanish
+reagent(5530, false, 2094)                                        -- Blinding Powder (not sold by vendors): Blind
+local ONLY_WHILE_DEAD = { [20608] = true }
 
 local ITEMS = {
     [2504] = { name = "Worn Shortbow", classID = 2, subClassID = 2 },
@@ -352,14 +374,27 @@ function Mock.BuildEnv(S)
     env.GetBuildInfo = function() return "1.60.1", "70862", "Nov 7 2026", 16001 end
     env.C_AddOns = { GetAddOnMetadata = function(name, key) if name == "Prepped" then return Mock.metadata[key] end end }
     env.NUM_BAG_SLOTS, env.NUM_TOTAL_EQUIPPED_BAG_SLOTS = 4, 5
+    local function NumSlots(bag) return (bag == 0 or bag == 5) and 16 or 0 end
+    env.__bagSlotReads = 0
     env.C_Container = {
-        GetContainerNumSlots = function(bag) return (bag == 0 or bag == 5) and 16 or 0 end,
+        GetContainerNumSlots = NumSlots,
         GetContainerItemInfo = function(bag, slot)
+            env.__bagSlotReads = env.__bagSlotReads + 1
             for _, it in ipairs(S.bags or {}) do
                 if it.bag == bag and it.slot == slot then return { itemID = it.itemID, stackCount = it.count } end
             end
         end,
+        -- free slots, bag family (0 = any item)
+        GetContainerNumFreeSlots = function(bag)
+            if bag == 0 and S.freeBagSlots then return S.freeBagSlots, 0 end
+            local used = 0
+            for _, it in ipairs(S.bags or {}) do if it.bag == bag then used = used + 1 end end
+            return NumSlots(bag) - used, 0
+        end,
     }
+    env.__sounds = {}
+    env.SOUNDKIT = { MAP_PING = 3175 }
+    env.PlaySound = function(soundKitID) env.__sounds[#env.__sounds + 1] = soundKitID; return true end
     env.Enum = {
         ItemClass = { Weapon = 2, Armor = 4 },
         ItemWeaponSubclass = { Thrown = 16 },
@@ -374,7 +409,7 @@ function Mock.BuildEnv(S)
 
     env.C_Item = {
         GetItemInfo = function(id)
-            local it = ITEMS[id]; if not it then return nil end
+            local it = ITEMS[id]; if not it or (S.uncachedItems and S.uncachedItems[id]) then return nil end
             return Loc(it.name), "link", 1, 1, 1, "type", "subtype", 20, "", 0, 0, it.classID, it.subClassID
         end,
         GetItemInfoInstant = function(id)
@@ -383,6 +418,7 @@ function Mock.BuildEnv(S)
         end,
         GetItemCount = function(id) return (S.items and S.items[id]) or 0 end,
         GetItemSpell = function(id)
+            if S.uncachedItems and S.uncachedItems[id] then return nil end
             local it = ITEMS[id]
             if it and it.spell then return SpellName(it.spell), it.spell end
         end,
@@ -394,11 +430,24 @@ function Mock.BuildEnv(S)
             return list
         end,
     }
-    env.C_Spell = { GetSpellName = SpellName }
-
     -- Spellbook: learned spells are "Spell" items, futureSpells "FutureSpell" items
     local known = {}
     for _, id in ipairs(S.spells or {}) do known[id] = true end
+
+    env.__usableChecks = 0
+    env.C_Spell = {
+        GetSpellName = SpellName,
+        -- isUsable, insufficientPower. Needs the spell's reagent unless a perk removes it.
+        IsSpellUsable = function(id)
+            env.__usableChecks = env.__usableChecks + 1
+            if not known[id] or S.dead then return false, false end
+            if ONLY_WHILE_DEAD[id] then return false, false end
+            local need = REAGENTS[id]
+            if not need then return true, false end
+            if (S.reagentEconomy and need.vendor) or (S.reagentFreeSpells and S.reagentFreeSpells[id]) then return true, false end
+            return ((S.items and S.items[need.item]) or 0) > 0, false
+        end,
+    }
     local book = {}
     for _, id in ipairs(S.spells or {}) do book[#book + 1] = { name = SpellName(id) or "?", spellID = id, actionID = id, itemType = 1, isOffSpec = false } end
     for _, id in ipairs(S.futureSpells or {}) do book[#book + 1] = { name = SpellName(id), spellID = id, actionID = id, itemType = 2, isOffSpec = false } end

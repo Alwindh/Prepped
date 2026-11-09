@@ -4,7 +4,7 @@
 local _, ns = ...
 local API = ns.API
 
-local DruidReminders = {}
+local DruidReminders = { class = "DRUID" }
 
 local MARK_OF_THE_WILD = API.SpellFamily("Mark of the Wild", { 1126, 5232, 6756, 5234, 8907, 9884, 9885 }, { class = "DRUID", aura = true })
 local GIFT_OF_THE_WILD = API.SpellFamily("Gift of the Wild", { 21849, 21850 }, { class = "DRUID", aura = true })
@@ -31,15 +31,17 @@ local druidReminders = {
         message = "Missing Mark of the Wild!",
         messageLow = "Mark of the Wild expiring (%ss left)",
         mustNotRest = true,
+        noTravel = true,
     },
     { id = "druid_rebirth_seeds", reagents = REBIRTH_SEEDS, family = REBIRTH, fallbackName = "Rebirth reagents", mustRest = true },
     { id = "druid_gift_reagents", reagents = GIFT_REAGENTS, family = GIFT_OF_THE_WILD, fallbackName = "Gift of the Wild reagents", mustRest = true },
 }
 
--- Vendor reagents: not needed with the Legacy perk "Reagent Economy"
+-- Vendor reagents: hidden when not needed (Legacy perk "Reagent Economy", ...)
 local function CheckReagent(config)
     if not API.KnowsFamily(config.family) or API.HasReagentEconomy() then return nil end
-    local count, name = API.CountReagentForKnownSpell(config.reagents)
+    local count, name, option = API.CountReagentForKnownSpell(config.reagents)
+    if option and not API.ReagentNeeded(option.item, option.spells, true) then return nil end
     if count < Prepped:GetRuleThreshold(config.id) then
         return string.format("Low on %s (%d left)", name or config.fallbackName, count), { name = name or config.fallbackName, count = count }
     end
@@ -52,14 +54,11 @@ local checks = {
 }
 
 function checks.druid_mark(config)
-    if API.IsTraveling() then return nil end
     if not (API.KnowsFamily(MARK_OF_THE_WILD) or API.KnowsFamily(GIFT_OF_THE_WILD)) then return nil end
     return Prepped:CheckTimedBuff(config.id, IsMarkOfTheWild, config.message, config.messageLow)
 end
 
 function DruidReminders.CheckReminders()
-    local _, playerClass = UnitClass("player")
-    if playerClass ~= "DRUID" then return end
     Prepped:RunReminders(druidReminders, checks)
 end
 

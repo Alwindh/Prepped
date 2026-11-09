@@ -3,7 +3,7 @@
 local _, ns = ...
 local API = ns.API
 
-local PaladinReminders = {}
+local PaladinReminders = { class = "PALADIN" }
 
 local AURAS = API.SpellFamily("Auras", {
     465,   -- Devotion Aura
@@ -35,11 +35,11 @@ local SYMBOL_OF_KINGS = 21177
 local SYMBOL_OF_DIVINITY = 17033
 
 local paladinReminders = {
-    { id = "paladin_aura", message = "No Aura Active!", mustNotRest = true },
-    { id = "paladin_blessing", message = "No Blessing Active!", messageLow = "Blessing expiring (%ss left)", mustNotRest = true },
+    { id = "paladin_aura", message = "No Aura Active!", mustNotRest = true, noTravel = true },
+    { id = "paladin_blessing", message = "No Blessing Active!", messageLow = "Blessing expiring (%ss left)", mustNotRest = true, noTravel = true },
     { id = "paladin_kings", message = "Low on Symbol of Kings (%s left)", item = SYMBOL_OF_KINGS, family = GREATER_BLESSINGS, mustRest = true },
     { id = "paladin_divinity", message = "Low on Symbol of Divinity (%s left)", item = SYMBOL_OF_DIVINITY, family = DIVINE_INTERVENTION, mustRest = true },
-    { id = "paladin_righteous_fury", message = "Missing Righteous Fury!", messageLow = "Righteous Fury expiring (%ss left)", mustNotRest = true },
+    { id = "paladin_righteous_fury", message = "Missing Righteous Fury!", messageLow = "Righteous Fury expiring (%ss left)", mustNotRest = true, noTravel = true },
 }
 
 local function PlayerHasShield()
@@ -49,15 +49,8 @@ local function PlayerHasShield()
     return itemClassID == 4 and itemSubClassID == 6 -- Armor / Shields
 end
 
--- Vendor reagents: not needed with the Legacy perk "Reagent Economy"
-local function CheckReagent(config)
-    if not API.KnowsFamily(config.family) or API.HasReagentEconomy() then return nil end
-    local count = C_Item.GetItemCount(config.item)
-    if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format(config.message, count), count
-    end
-    return nil
-end
+-- Vendor reagents: hidden when not needed (Legacy perk "Reagent Economy", ...)
+local function CheckReagent(config) return Prepped:CheckReagent(config) end
 
 local checks = {
     paladin_kings = CheckReagent,
@@ -65,27 +58,25 @@ local checks = {
 }
 
 function checks.paladin_aura(config)
-    if IsMounted() or not API.KnowsFamily(AURAS) then return nil end
+    if not API.KnowsFamily(AURAS) then return nil end
     if API.FindPlayerBuff(IsPaladinAura) == "missing" then return config.message end
     return nil
 end
 
 function checks.paladin_blessing(config)
-    if IsMounted() or not API.KnowsFamily(BLESSINGS) then return nil end
+    if not API.KnowsFamily(BLESSINGS) then return nil end
     return Prepped:CheckTimedBuff(config.id, IsBlessing, config.message, config.messageLow)
 end
 
 -- Only for Protection paladins with a shield in a group
 function checks.paladin_righteous_fury(config)
-    if IsMounted() or not API.KnowsFamily(RIGHTEOUS_FURY) then return nil end
+    if not API.KnowsFamily(RIGHTEOUS_FURY) then return nil end
     if not (IsInGroup() or GetNumGroupMembers() > 0) then return nil end
     if not PlayerHasShield() or API.GetPrimaryTalentTree() ~= TREE_PROTECTION then return nil end
     return Prepped:CheckTimedBuff(config.id, IsRighteousFury, config.message, config.messageLow)
 end
 
 function PaladinReminders.CheckReminders()
-    local _, playerClass = UnitClass("player")
-    if playerClass ~= "PALADIN" then return end
     Prepped:RunReminders(paladinReminders, checks)
 end
 

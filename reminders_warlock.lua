@@ -4,7 +4,7 @@
 local _, ns = ...
 local API = ns.API
 
-local WarlockReminders = {}
+local WarlockReminders = { class = "WARLOCK" }
 
 local DEMON_SKIN = API.SpellFamily("Demon Skin", { 687, 696 }, { class = "WARLOCK", aura = true })
 local DEMON_ARMOR = API.SpellFamily("Demon Armor", { 706, 1086, 11733, 11734, 11735 }, { class = "WARLOCK", aura = true })
@@ -42,16 +42,15 @@ local HEALTHSTONES = {
 }
 local SOULSTONES = { 5232, 16892, 16893, 16895, 16896 } -- Minor, Lesser, (plain), Greater, Major
 
-local MAIN_HAND_SLOT = 16
-
 local warlockReminders = {
-    { id = "warlock_armor", mustNotRest = true },
-    { id = "warlock_pet", message = "No demon summoned", mustNotRest = true },
+    { id = "warlock_armor", mustNotRest = true, noTravel = true },
+    { id = "warlock_pet", message = "No demon summoned", mustNotRest = true, noTravel = true },
     {
         id = "warlock_weapon_stone",
         message = "Missing weapon stone (Firestone/Spellstone)",
         messageLow = "Weapon stone expiring (%ss left)",
         mustNotRest = true,
+        noTravel = true,
     },
     { id = "warlock_healthstone", message = "Missing item: Healthstone", mustNotRest = true, outOfCombat = true },
     { id = "warlock_soulstone", message = "Missing item: Soulstone", mustNotRest = true, outOfCombat = true },
@@ -71,35 +70,30 @@ end
 
 local checks = {}
 
+local ARMOR_TEXTS = {
+    [true] = { "Missing Demon Armor!", "Demon Armor expiring (%ss left)" },
+    [false] = { "Missing Demon Skin!", "Demon Skin expiring (%ss left)" },
+}
+
 function checks.warlock_armor(config)
-    if IsMounted() or not KnowsAny(DEMON_ARMOR, DEMON_SKIN) then return nil end
-    local name = API.KnowsFamily(DEMON_ARMOR) and "Demon Armor" or "Demon Skin"
-    return Prepped:CheckTimedBuff(config.id, IsDemonArmor, "Missing " .. name .. "!", name .. " expiring (%ss left)")
+    if not KnowsAny(DEMON_ARMOR, DEMON_SKIN) then return nil end
+    local texts = ARMOR_TEXTS[API.KnowsFamily(DEMON_ARMOR)]
+    return Prepped:CheckTimedBuff(config.id, IsDemonArmor, texts[1], texts[2])
 end
 
 function checks.warlock_pet(config)
-    if IsMounted() or not API.KnowsFamily(SUMMON_DEMON) then return nil end
+    if not API.KnowsFamily(SUMMON_DEMON) then return nil end
     if UnitExists("pet") and not UnitIsDead("pet") then return nil end
     -- Sacrificed on purpose, or buff data hidden right now: don't nag
     if API.FindPlayerBuff(IsSacrificeBuff) ~= "missing" then return nil end
     return config.message
 end
 
+-- Like poisons, the stone is an "Imbue" enchant on the main hand; an oil on the
+-- same weapon doesn't count.
 function checks.warlock_weapon_stone(config)
-    if IsMounted() or not GetInventoryItemID("player", MAIN_HAND_SLOT) then return nil end
     if not KnowsAny(CREATE_FIRESTONE, CREATE_SPELLSTONE) then return nil end
-    -- Like poisons, the stone is an "Imbue" enchant; an oil on the same weapon doesn't count.
-    local hasImbue, msLeft = API.GetWeaponImbues()
-    if not hasImbue then
-        return config.message
-    end
-    if msLeft and Prepped:IsLowEnabled(config.id) then
-        local secondsLeft = msLeft / 1000
-        if secondsLeft <= Prepped:GetRuleThreshold(config.id) then
-            return string.format(config.messageLow, math.max(0, math.floor(secondsLeft)))
-        end
-    end
-    return nil
+    return Prepped:CheckWeaponImbue(config, false)
 end
 
 -- Healthstone and Soulstone: only when you have a shard to make one.
@@ -128,8 +122,6 @@ function checks.warlock_soul_shards(config)
 end
 
 function WarlockReminders.CheckReminders()
-    local _, playerClass = UnitClass("player")
-    if playerClass ~= "WARLOCK" then return end
     Prepped:RunReminders(warlockReminders, checks)
 end
 

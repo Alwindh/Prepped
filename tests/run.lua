@@ -701,5 +701,339 @@ do
     end
 end
 
+------------------------------------------------------------------------
+-- Scheduling and cost: events are coalesced, nothing is polled 10x a second
+------------------------------------------------------------------------
+-- Counts the full reminder checks from now on.
+local function CountChecks(env)
+    local P, counter = env.Prepped, { n = 0 }
+    local original = P.CheckReminders
+    P.CheckReminders = function(self, ...)
+        counter.n = counter.n + 1
+        return original(self, ...)
+    end
+    return counter
+end
+
+do
+    -- A leveling priest in the open world: four buff reminders (Fortitude, Inner Fire, food, camp)
+    local S = { class = "PRIEST", level = 30, spells = { 1243, 588 }, time = NOW,
+        buffs = { { spellId = 1243, expires = NOW + 1000 }, { spellId = 588, expires = NOW + 1000 } } }
+    local env = Setup(S)
+    env.__tick(1)
+    local checks = CountChecks(env)
+
+    for _ = 1, 25 do env.__fire("BAG_UPDATE", 0) end
+    env.__tick(0.3)
+    Check("cost: a burst of 25 bag updates costs one check", checks.n == 1, checks.n)
+
+    checks.n = 0
+    local scansBefore = env.__auraScans
+    env.__tick(10)
+    Check("cost: idle, about one check per second (was ten)", checks.n >= 8 and checks.n <= 11, checks.n)
+    -- 2 buffs = 3 reads per scan; one scan per 5 s at most while nothing changes (was one per buff rule per check)
+    Check("cost: idle, buffs are read once per change, not per check", env.__auraScans - scansBefore <= 3 * 3,
+        env.__auraScans - scansBefore)
+
+    -- Health changes (every hit in combat) don't trigger checks at all
+    env.Prepped:CheckReminders()
+    checks.n = 0
+    for _ = 1, 50 do env.__fire("UNIT_HEALTH", "player"); env.__fire("UNIT_HEALTH", "pet") end
+    env.__tick(0.5)
+    Check("cost: health events aren't listened to", checks.n == 0, checks.n)
+
+    -- A buff change still shows up right away
+    S.buffs = { { spellId = 588, expires = NOW + 1000 } }
+    env.__fire("UNIT_AURA", "player")
+    env.__tick(0.3)
+    Check("cost: a buff change shows within a fraction of a second", Has(VisibleReminders(env), "Missing Power Word: Fortitude!"),
+        table.concat(VisibleReminders(env), " | "))
+    Check("cost: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+end
+
+do
+    -- Water is counted once per change of the bags, not on every check
+    local S = { class = "PRIEST", level = 40, spells = {}, resting = true, time = NOW,
+        bags = { { bag = 0, slot = 1, itemID = 159, count = 5 } } }
+    local env = Setup(S)
+    env.__tick(1)
+    Check("bags: water counted", Has(VisibleReminders(env), "Low on water (5 left)"))
+    local reads = env.__bagSlotReads
+    env.__tick(10)
+    Check("bags: no rescans while the bags don't change", env.__bagSlotReads == reads, env.__bagSlotReads - reads)
+    S.bags[1].count = 3
+    env.__fire("BAG_UPDATE", 0)
+    env.__tick(0.3)
+    Check("bags: rescanned after a bag update", Has(VisibleReminders(env), "Low on water (3 left)"),
+        table.concat(VisibleReminders(env), " | "))
+end
+
+do
+    -- Water whose item data was still loading (just after login) is counted once it arrives
+    local S = { class = "PRIEST", level = 40, spells = {}, resting = true, time = NOW, uncachedItems = { [159] = true },
+        bags = { { bag = 0, slot = 1, itemID = 159, count = 50 } } }
+    local env = Setup(S)
+    env.__tick(1)
+    Check("item data: not counted before it loads", Has(VisibleReminders(env), "Low on water (0 left)"),
+        table.concat(VisibleReminders(env), " | "))
+    S.uncachedItems = nil
+    env.__fire("GET_ITEM_INFO_RECEIVED", 159, true)
+    env.__tick(0.3)
+    Check("item data: counted once it loads", not Has(VisibleReminders(env), "Low on water (0 left)"),
+        table.concat(VisibleReminders(env), " | "))
+    local checks = CountChecks(env)
+    env.Prepped:CheckReminders()
+    checks.n = 0
+    for i = 1, 20 do env.__fire("GET_ITEM_INFO_RECEIVED", 1000 + i, true) end
+    env.__tick(0.5)
+    Check("item data: other items loading (auction house, tooltips) don't trigger checks", checks.n == 0, checks.n)
+end
+
+do
+    -- Building the group message (or /prepped debug) is a dry run: it doesn't draw the supplies it looks at
+    local S = { class = "ROGUE", spells = { 1856 }, items = { [5140] = 3 }, time = NOW }
+    local env = Setup(S)
+    env.Prepped:CheckReminders()
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    Check("dry run: debug doesn't put supply reminders on screen", not Has(VisibleReminders(env), "Low on Flash Powder (3 left)"),
+        table.concat(VisibleReminders(env), " | "))
+    Check("dry run: but the group message still sees them",
+        DebugValue(env, "Group message when joining") == "[Prepped] you're low on Flash Powder (3 left), remember to buy more Flash Powder.",
+        DebugValue(env, "Group message when joining"))
+end
+
+------------------------------------------------------------------------
+-- Settings: versioned, sparse, defaults from the rules
+------------------------------------------------------------------------
+do
+    local env = Mock.BuildEnv({ class = "PRIEST", spells = { 1243 }, time = NOW })
+    -- Settings saved by v2.3.0: every default written out, plus rules that no longer exist
+    env.PreppedSettings = {
+        useAccountWide = true,
+        global = {
+            enabledRules = { general_master = true, priest_fortitude = true, priest_inner_fire = false, paladin_seal = true },
+            enabledLowRules = { priest_fortitude = true, general_water = true, mage_ai_buff = false },
+            thresholds = { priest_fortitude = 60, priest_candles = 25, general_repair = 100, warrior_battle_shout = 30, hunter_ammo_low = 99999 },
+        },
+        profiles = { ["Other - Realm"] = { enabledRules = { druid_mark = true }, enabledLowRules = {}, thresholds = { druid_mark = 120 } } },
+        appearance = { fontSize = 22, minWidth = 400, fontColor = { r = 1, g = 1, b = 1 }, bgColor = { r = 0, g = 0, b = 0, a = 0.3 } },
+    }
+    LoadAddon(env)
+    local P, saved = env.Prepped, env.PreppedSettings
+    local g = saved.global
+    Check("settings: upgraded to schema 2", saved.schemaVersion == 2, saved.schemaVersion)
+    Check("settings: removed rules dropped", g.enabledRules.paladin_seal == nil and g.thresholds.warrior_battle_shout == nil)
+    Check("settings: stored defaults dropped", g.enabledRules.priest_fortitude == nil and g.enabledRules.general_master == nil
+        and g.thresholds.priest_fortitude == nil and g.thresholds.general_repair == nil
+        and g.enabledLowRules.priest_fortitude == nil and g.enabledLowRules.general_water == nil)
+    Check("settings: the player's own choices kept", g.enabledRules.priest_inner_fire == false and g.thresholds.priest_candles == 25
+        and g.enabledLowRules.mage_ai_buff == false)
+    Check("settings: out-of-range threshold clamped", g.thresholds.hunter_ammo_low == 4000, g.thresholds.hunter_ammo_low)
+    local other = saved.profiles["Other - Realm"]
+    Check("settings: other characters upgraded too", other.thresholds.druid_mark == 120 and other.enabledRules.druid_mark == nil)
+    Check("settings: appearance kept", saved.appearance.fontSize == 22 and saved.appearance.bgColor.a == 0.3)
+    Check("settings: defaults still apply", P:GetRuleThreshold("priest_fortitude") == 60 and P:IsRuleEnabled("priest_fortitude") == true
+        and P:IsRuleEnabled("priest_inner_fire") == false)
+    Check("settings: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+
+    local fresh = Setup({ class = "PRIEST", spells = { 1243 } })
+    fresh.Prepped:CheckReminders()
+    local fg = fresh.PreppedSettings.global
+    Check("settings: a fresh install stores no defaults", next(fg.thresholds) == nil and next(fg.enabledRules) == nil
+        and next(fg.enabledLowRules) == nil and fresh.PreppedSettings.schemaVersion == 2)
+
+    local newer = Mock.BuildEnv({ class = "PRIEST", spells = { 1243 }, time = NOW })
+    newer.PreppedSettings = { schemaVersion = 99, useAccountWide = true,
+        global = { enabledRules = { future_rule = true }, enabledLowRules = {}, thresholds = { priest_fortitude = 60 } }, profiles = {} }
+    LoadAddon(newer)
+    Check("settings: from a newer Prepped (downgrade) left alone", newer.PreppedSettings.schemaVersion == 99
+        and newer.PreppedSettings.global.enabledRules.future_rule == true and newer.PreppedSettings.global.thresholds.priest_fortitude == 60)
+end
+
+do
+    -- A new per-character profile uses the rule's default (60 s), as the options show it
+    local S = { class = "SHAMAN", spells = { 324 }, time = NOW, buffs = { { spellId = 324, expires = NOW + 30 } } }
+    local env = Setup(S)
+    env.Prepped:SetAccountWide(false)
+    env.Prepped:CheckReminders()
+    Check("settings: per-character profile uses the default warning time", Has(VisibleReminders(env), "Shield expiring (30s left)"),
+        table.concat(VisibleReminders(env), " | "))
+end
+
+------------------------------------------------------------------------
+-- Reagents: Legacy perks Prepped doesn't know yet are detected by the client
+------------------------------------------------------------------------
+do
+    local S = { class = "MAGE", spells = { 1459, 23028, 3561 }, resting = true, time = NOW, reagentFreeSpells = { [23028] = true } }
+    local env = Setup(S)
+    env.Prepped:CheckReminders()
+    local shown = VisibleReminders(env)
+    Check("reagents: Arcane Brilliance castable without powder hides the powder reminder",
+        not Has(shown, "Low on reagents: Arcane Powder (0 left!)"), table.concat(shown, " | "))
+    Check("reagents: other reagents still needed", Has(shown, "Low on reagents: Rune of Teleportation (0 left!)"), table.concat(shown, " | "))
+
+    S.items = { [17020] = 3 }
+    env.__fire("BAG_UPDATE", 0)
+    env.__tick(0.3)
+    Check("reagents: remembered after picking up a few", not Has(VisibleReminders(env), "Low on reagents: Arcane Powder (3 left!)"))
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    Check("reagents: listed in /prepped debug", DebugValue(env, "Spells seen working without their reagent") == "Arcane Brilliance 23028",
+        DebugValue(env, "Spells seen working without their reagent"))
+
+    S.reagentFreeSpells = nil
+    env.__fire("TRAIT_CONFIG_UPDATED", 1)
+    env.__tick(0.3)
+    Check("reagents: forgotten when the perks change", Has(VisibleReminders(env), "Low on reagents: Arcane Powder (3 left!)"),
+        table.concat(VisibleReminders(env), " | "))
+end
+
+for _, case in ipairs({
+    { "candles for the rank you know", { class = "PRIEST", spells = { 21562, 21564 }, reagentFreeSpells = { [21564] = true } },
+        {}, { "Low on Sacred Candles (0 left)" } },
+    { "Rebirth seeds", { class = "DRUID", spells = { 20484 }, reagentFreeSpells = { [20484] = true } }, {}, { "Low on Maple Seeds (0 left)" } },
+    { "Symbols of Kings", { class = "PALADIN", spells = { 25782, 19752 }, reagentFreeSpells = { [25782] = true } },
+        { "Low on Symbol of Divinity (0 left)" }, { "Low on Symbol of Kings (0 left)" } },
+    -- Reincarnation only works while dead, so the client can't tell: keep reminding
+    { "Ankhs (Reincarnation can't be tested)", { class = "SHAMAN", spells = { 20608 } }, { "Low on reagents: Ankh (0 left)" }, {} },
+    -- Reagent Economy only covers vendor reagents
+    { "Blinding Powder isn't covered by Reagent Economy", { class = "ROGUE", spells = { 1856, 2094 }, reagentEconomy = true, items = { [5140] = 0 } },
+        { "Low on Blinding Powder (0 left)" }, { "Low on Flash Powder (0 left)" } },
+}) do
+    local S = case[2]
+    S.resting, S.time = true, NOW
+    Run("reagents: " .. case[1], S, case[3], case[4])
+end
+
+do
+    local env = Mock.BuildEnv({ class = "ROGUE", spells = { 1856 }, time = NOW, reagentEconomy = true })
+    LoadAddon(env)
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    Check("debug: Legacy perks listed", DebugValue(env, "Legacy perks") == "Some Other Perk 999999, Reagent Economy 1262650",
+        DebugValue(env, "Legacy perks"))
+end
+
+------------------------------------------------------------------------
+-- Context: travel, combat, instances of "can't act on it right now"
+------------------------------------------------------------------------
+Run("mage: no buff reminders while mounted", { class = "MAGE", spells = { 1459, 168 }, mounted = true, buffs = {}, time = NOW },
+    {}, { "Buff Missing: Arcane Intellect", "Buff Missing: Mage Armor" })
+Run("shaman: no shield/imbue reminders in Ghost Wolf", { class = "SHAMAN", spells = { 324 }, form = 16, buffs = {}, time = NOW,
+    equipped = { [16] = 2131 } }, {}, { "Buff missing: Shield", "Buff missing: Weapon" })
+Run("shaman: no shield/imbue reminders while mounted", { class = "SHAMAN", spells = { 324 }, mounted = true, buffs = {}, time = NOW,
+    equipped = { [16] = 2131 } }, {}, { "Buff missing: Shield", "Buff missing: Weapon" })
+Run("shaman: expiring shield and imbue", { class = "SHAMAN", spells = { 324 }, talents = { 0, 15, 0 }, time = NOW, equipped = { [16] = 2131 },
+    buffs = { { spellId = 324, expires = NOW + 30 } }, enchants = { [0] = { { type = IMBUE, ms = 40000 } } } },
+    { "Shield expiring (30s left)", "Weapon imbue expiring (40s left)" })
+Run("hunter: unhappy pet waits until out of combat", { class = "HUNTER", spells = { 1515 }, inCombat = true, time = NOW,
+    pet = { happiness = 1, foodTypes = { "Meat" } } }, {}, { "Pet is unhappy" })
+Run("rogue: no poison reminder without a weapon", { class = "ROGUE", spells = { 1856 }, skills = { [40] = 120 }, items = { [6947] = 30 }, time = NOW },
+    {}, { "Missing Weapon Poison!" })
+
+do
+    -- Supply windows (joining a group, ready checks) wait while you're in combat
+    local S = { class = "ROGUE", spells = { 1856 }, items = { [5140] = 3 }, time = NOW, inCombat = true }
+    local env = Setup(S, function(P) P:SetRuleEnabled("general_group_announce", false) end)
+    JoinGroup(env, S)
+    env.__tick(1)
+    Check("group check: not during combat", not Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+    S.inCombat = false
+    env.__fire("PLAYER_REGEN_ENABLED")
+    env.__tick(0.3)
+    Check("group check: shown once combat ends", Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+end
+
+do
+    -- Outside town during the group window a hunter sees "critical", not also "low"
+    local S = Hunter({ ammoCount = 150 })
+    local env = Setup(S, function(P) P:SetRuleEnabled("general_group_announce", false) end)
+    JoinGroup(env, S)
+    env.__tick(1)
+    local shown = VisibleReminders(env)
+    Check("hunter: critical ammo shown in the group window", Has(shown, "Critically low on ammo (150 left)"), table.concat(shown, " | "))
+    Check("hunter: low ammo left out next to critical", not Has(shown, "Low on ammo (150 left)"), table.concat(shown, " | "))
+end
+
+------------------------------------------------------------------------
+-- New reminders and controls
+------------------------------------------------------------------------
+do
+    -- Ready check: supplies on screen until it's over
+    local S = { class = "ROGUE", spells = { 1856 }, items = { [5140] = 3 }, inGroup = true, time = NOW }
+    local env = Setup(S)
+    env.Prepped:CheckReminders()
+    Check("ready check: supplies hidden before", not Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+    env.__fire("READY_CHECK", "Leader", 35)
+    env.__tick(0.3)
+    Check("ready check: supplies shown", Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+    env.__fire("READY_CHECK_FINISHED", false)
+    env.__tick(0.3)
+    Check("ready check: hidden when it's over", not Has(VisibleReminders(env), "Low on Flash Powder (3 left)"))
+
+    local S2 = { class = "ROGUE", spells = { 1856 }, items = { [5140] = 3 }, inGroup = true, time = NOW }
+    local env2 = Setup(S2, function(P) P:SetRuleEnabled("general_ready_check", false) end)
+    env2.__fire("READY_CHECK", "Leader", 35)
+    env2.__tick(0.3)
+    Check("ready check: off", not Has(VisibleReminders(env2), "Low on Flash Powder (3 left)"))
+end
+
+Run("bags: low bag space in town", { class = "WARRIOR", resting = true, freeBagSlots = 2, time = NOW }, { "Low on bag space (2 free)" })
+Run("bags: enough bag space", { class = "WARRIOR", resting = true, freeBagSlots = 10, time = NOW }, {}, { "Low on bag space (10 free)" })
+Run("bags: not out adventuring", { class = "WARRIOR", freeBagSlots = 2, time = NOW }, {}, { "Low on bag space (2 free)" })
+
+do
+    -- /prepped snooze hides what's on screen for a while
+    local S = { class = "PRIEST", spells = { 1243 }, buffs = {}, time = NOW }
+    local env = Setup(S)
+    env.Prepped:CheckReminders()
+    Check("snooze: reminder shown first", Has(VisibleReminders(env), "Missing Power Word: Fortitude!"))
+    env.SlashCmdList.PREPPED("snooze 10")
+    Check("snooze: hidden", not Has(VisibleReminders(env), "Missing Power Word: Fortitude!"))
+    Check("snooze: confirmed in chat", env.__printed[#env.__printed]:find("snoozed 1 reminder for 10 minutes", 1, true) ~= nil,
+        env.__printed[#env.__printed])
+    env.__tick(9 * 60)
+    Check("snooze: still hidden after 9 minutes", not Has(VisibleReminders(env), "Missing Power Word: Fortitude!"))
+    env.__tick(61)
+    Check("snooze: back after 10 minutes", Has(VisibleReminders(env), "Missing Power Word: Fortitude!"))
+    env.SlashCmdList.PREPPED("snooze")
+    Check("snooze: default length", not Has(VisibleReminders(env), "Missing Power Word: Fortitude!"))
+    env.SlashCmdList.PREPPED("unsnooze")
+    Check("snooze: unsnooze brings it back", Has(VisibleReminders(env), "Missing Power Word: Fortitude!"))
+    Check("snooze: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+end
+
+do
+    -- Optional sound: off by default; once per reminder per cooldown; never in combat
+    local FORT = { spellId = 1243, expires = NOW + 100000 }
+    local S = { class = "PRIEST", spells = { 1243 }, buffs = { FORT }, time = NOW }
+    local quiet = Setup({ class = "PRIEST", spells = { 1243 }, buffs = {}, time = NOW })
+    quiet.__tick(2)
+    Check("sound: off by default", #quiet.__sounds == 0, #quiet.__sounds)
+
+    local env = Setup(S, function(P) P:SetRuleEnabled("general_sound", true) end)
+    local function SetBuff(present)
+        S.buffs = present and { FORT } or {}
+        env.__fire("UNIT_AURA", "player")
+        env.__tick(0.3)
+    end
+    env.__tick(1)
+    SetBuff(false)
+    Check("sound: plays when a reminder appears", #env.__sounds == 1, #env.__sounds)
+    env.__tick(15)
+    SetBuff(true)
+    SetBuff(false)
+    Check("sound: not again within the cooldown", #env.__sounds == 1, #env.__sounds)
+    SetBuff(true)
+    env.__tick(5 * 60)
+    SetBuff(false)
+    Check("sound: again after the cooldown (5 minutes)", #env.__sounds == 2, #env.__sounds)
+    SetBuff(true)
+    env.__tick(5 * 60)
+    S.inCombat = true
+    env.__fire("PLAYER_REGEN_DISABLED")
+    SetBuff(false)
+    Check("sound: never in combat", #env.__sounds == 2, #env.__sounds)
+    Check("sound: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+end
+
 print(string.format("%d passed, %d failed", passes, failures))
 os.exit(failures == 0 and 0 or 1)
