@@ -276,6 +276,11 @@ end
 --   "missing"
 --   "unknown"               (buff data is hidden right now; don't warn)
 function API.FindPlayerBuff(matcher)
+    -- While buff data is hidden (in combat), Forever refuses add-on aura scans
+    -- outright ("Auras cannot be accessed when secret"): don't even try.
+    if API.AreAurasRestricted() then
+        return "unknown"
+    end
     local ok, state, remaining = pcall(ScanPlayerBuffs, matcher)
     if not ok then
         -- Most likely restricted buff data; kept for /prepped debug.
@@ -534,6 +539,25 @@ function API.GetUnresolvedSpellIDs()
             end
         end
     end
+    return result
+end
+
+-- Learned spells of this class that Prepped recognises by name but whose spell
+-- ID isn't listed (e.g. a Forever-only spell or rank): "Name id", for /prepped debug.
+function API.GetUnlistedNameMatches(classToken)
+    local result, seen = {}, {}
+    for name, ids in pairs(GetSpellCache()) do
+        for _, id in ipairs(ids) do
+            for _, family in ipairs(families) do
+                if family.class == classToken and not family.idSet[id] and not seen[id]
+                    and API.FamilyMatches(family, name, id) then
+                    seen[id] = true
+                    result[#result + 1] = string.format("%s %d", name, id)
+                end
+            end
+        end
+    end
+    table.sort(result)
     return result
 end
 

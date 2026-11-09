@@ -4,11 +4,10 @@ local API = ns.API
 
 local ShamanReminders = {}
 
--- Water Shield is a Restoration talent in Forever; its Forever spell ID isn't
--- known yet, so the English name is a fallback until the TBC IDs are confirmed.
+-- Water Shield is new in Forever and its spell ID isn't known yet, so it is
+-- recognised by its English name (English clients only) until it's listed here.
 local SHIELDS = API.SpellFamily("Shields", {
     324, 325, 905, 945, 8134, 10431, 10432, -- Lightning Shield
-    24398, 33736,                           -- Water Shield
 }, { class = "SHAMAN", aura = true, englishNames = { "Water Shield" } })
 local REINCARNATION = API.SpellFamily("Reincarnation", { 20608 }, { class = "SHAMAN" })
 local WATER_WALKING = API.SpellFamily("Water Walking", { 546 }, { class = "SHAMAN" })

@@ -47,12 +47,11 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
   - **Rune of Portals**
 
 ### Paladin
-- **Missing Seal**: Triggers in combat if you don't have a Seal active, including Forever's Seal of Fury (with built-in logic to suppress the warning after using *Judgement*).
 - **Missing Aura**: Ensures you always have a Paladin Aura active.
-- **Missing Blessing**: Reminds you to keep a long-duration Blessing (Might, Wisdom, Kings, etc., or a Greater Blessing) active on yourself while adventuring.
+- **Missing Blessing**: Reminds you to keep a Blessing (Might, Wisdom or Kings, or a Greater Blessing) active on yourself while adventuring.
 - **Missing Righteous Fury**: Alerts you to activate Righteous Fury if you are in a group, have a shield equipped, and are Protection spec.
 - **Reagent Tracking**: Monitors your stock of **Symbol of Kings** and **Symbol of Divinity** while resting.
-- **"Warn if Low"**: Optional early warnings for Seals and Righteous Fury—get notified before they expire.
+- **"Warn if Low"**: Optional early warnings for Blessings and Righteous Fury—get notified before they expire.
 
 ### Priest
 - **Missing Power Word: Fortitude**: Alerts you when Fortitude (or Prayer of Fortitude) is missing while adventuring.
@@ -71,7 +70,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
 
 ### Shaman
-- **Missing Shield**: Alerts if Lightning Shield (or Water Shield, a Restoration talent in Forever) is missing.
+- **Missing Shield**: Alerts if Lightning Shield (or Water Shield) is missing. Water Shield is new in Forever and is only recognised on English clients until its spell ID is known.
 - **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
   - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware. Sharpening stones and oils don't count as an imbue.*
 - **Reagent Tracking**: Warnings while **resting** for (each only once you know the spell that uses it):
@@ -89,8 +88,6 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **"Warn if Low"**: Optional early warnings for Demon Armor and your weapon stone.
 
 ### Warrior
-- **Missing Battle Shout**: Alerts you if you don't have Battle Shout active while in combat (only if you know *Battle Shout*).
-- **"Warn if Low"**: Optional early warning for Battle Shout—get notified before it expires (default: 10 seconds remaining).
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
 - **Critical Ammo**: A "Red Alert" for when your ranged supplies are nearly empty.
 - **Low Ammo**: A convenience reminder to stock up while resting.
@@ -108,11 +105,11 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 
 ## WoW Forever Notes
 
-- **Buffs during combat**: Forever can hide buff information from addons during combat, boss encounters and PvP matches. When Prepped can't see your buffs it stays quiet instead of guessing, so in-combat reminders (Seal, Battle Shout, and other buffs that drop mid-fight) only show for buffs Blizzard keeps visible. Out of combat everything works as usual. For a guaranteed in-combat alert, add the buff to Blizzard's **Cooldown Manager** and give it an "On Aura Removed" alert.
+- **Buffs during combat**: Forever doesn't let add-ons read your buffs during combat, even in open-world fights. Buff reminders therefore work out of combat, and Prepped stays quiet in combat instead of guessing. For in-combat alerts (a Seal, Battle Shout or any other buff that drops mid-fight), add the buff to Blizzard's **Cooldown Manager** and give it an "On Aura Removed" alert.
 - **Reagent Economy perk**: If you have this Legacy perk, Prepped detects it and hides the reminders for vendor reagents (Arcane Powder, Runes, Ankhs, Symbols, Flash Powder, candles, Rebirth seeds, Wild Berries/Thornroot, …). Soul Shards and Blinding Powder aren't sold by vendors, so those reminders stay.
-- **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English).
-- **Spec detection** (Protection/Holy Paladin, Enhancement Shaman) uses the points spent in each talent tree.
-- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, which of your buffs Blizzard hides in combat, your druid form, and any spell IDs your client doesn't know.
+- **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English). The exception is Water Shield, until its Forever spell ID is known.
+- **Spec detection** (Protection Paladin, Enhancement Shaman) uses the points spent in each talent tree.
+- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, and spells Prepped only recognises by name (their IDs can then be added).
 
 ---
 

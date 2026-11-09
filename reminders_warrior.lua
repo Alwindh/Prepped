@@ -1,10 +1,7 @@
 -- Warrior-specific reminders module
-local _, ns = ...
-local API = ns.API
+-- (Forever hides buffs from add-ons in combat, so there is no Battle Shout reminder.)
 
 local WarriorReminders = {}
-
-local BATTLE_SHOUT = API.SpellFamily("Battle Shout", { 6673, 5242, 6192, 11549, 11550, 11551, 25289 }, { class = "WARRIOR", aura = true })
 
 local warriorReminders = {
     {
@@ -23,29 +20,14 @@ local warriorReminders = {
         ammoCheck = true,
         mustRest = true,
     },
-    {
-        id = "warrior_battle_shout",
-        message = "No Battle Shout Active!",
-        messageLow = "Battle Shout expiring (%ss left)",
-        inCombatOnly = true,
-    },
 }
-
--- Checks if the player has learned Battle Shout
-local function PlayerKnowsBattleShout()
-    return API.KnowsFamily(BATTLE_SHOUT)
-end
-
-local IsBattleShout = API.Matcher(BATTLE_SHOUT)
 
 function WarriorReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
     if playerClass ~= "WARRIOR" then return end
     
     local isResting = IsResting()
-    local inCombat = UnitAffectingCombat("player") or (InCombatLockdown and InCombatLockdown())
-    local isMounted = IsMounted()
-    
+
     local criticalTriggered = false
     local count = Prepped:GetAmmoCount()
 
@@ -57,7 +39,6 @@ function WarriorReminders.CheckReminders()
             -- Basic filters
             local filterPassed = true
             if config.mustRest and not isResting then filterPassed = false end
-            if config.inCombatOnly and not inCombat then filterPassed = false end
 
             -- If we already showed a "No Ammo" or "Critical" warning, skip "Low"
             if config.id == "warrior_ammo_low" and criticalTriggered then
@@ -65,24 +46,8 @@ function WarriorReminders.CheckReminders()
             end
             
             if filterPassed then
-                -- Battle Shout Logic
-                if config.id == "warrior_battle_shout" then
-                    if not isMounted and PlayerKnowsBattleShout() then
-                        -- In combat, Forever may hide buff data ("unknown"): don't warn then.
-                        local state, remaining = API.FindPlayerBuff(IsBattleShout)
-                        if state == "missing" then
-                            trigger = true
-                            displayMessage = config.message
-                        elseif state == "present" and remaining and Prepped:IsLowEnabled(config.id) then
-                            local threshold = Prepped:GetRuleThreshold(config.id, 10)
-                            if remaining <= threshold then
-                                trigger = true
-                                displayMessage = string.format(config.messageLow, math.max(0, math.floor(remaining)))
-                            end
-                        end
-                    end
                 -- Ammo Logic
-                elseif config.ammoCheck then
+                if config.ammoCheck then
                     trigger = true
                     -- count is already fetched
                     if not count or count == 0 then
