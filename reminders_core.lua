@@ -222,6 +222,8 @@ function Prepped:PrintDebugReport()
 
     local unresolved = API.GetUnresolvedSpellIDs()
     DebugLine("Unknown spell IDs: %s", #unresolved > 0 and table.concat(unresolved, ", ") or "none")
+    local unlisted = API.GetUnlistedNameMatches(classToken)
+    DebugLine("Recognised by name, ID not listed: %s", #unlisted > 0 and table.concat(unlisted, ", ") or "none")
     if API.lastBuffScanError then
         DebugLine("Last buff scan error: %s", tostring(API.lastBuffScanError))
     end
@@ -466,9 +468,7 @@ Prepped.AllRules = {
     { id = "warrior_no_ammo", label = "No Ammo/Thrown Equipped", group = "Warrior", description = "Show a warning when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)." },
     { id = "warrior_ammo_low", label = "Low Ammo/Thrown", group = "Warrior", defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 }, description = "Show a warning while resting when your ammo/thrown count drops below this." },
     { id = "warrior_ammo_critical", label = "Critical Ammo/Thrown", group = "Warrior", defaultThreshold = 20, unit = "count", range = { 0, 500, 10 }, description = "Show a warning at any time when your ammo/thrown count drops below this." },
-    { id = "warrior_battle_shout", label = "Missing Battle Shout", group = "Warrior", hasLowWarningToggle = true, defaultThreshold = 10, range = { 0, 60, 1 }, description = "Reminds you to have Battle Shout active when you are in combat." },
 
-    { id = "paladin_seal", label = "Missing Seal in Combat", group = "Paladin", hasLowWarningToggle = true, defaultThreshold = 5, range = { 0, 30, 1 }, description = "Reminds you to have a Seal active when you are in combat." },
     { id = "paladin_aura", label = "Missing Aura", group = "Paladin", description = "Reminds you to have a Paladin Aura active at all times." },
     { id = "paladin_blessing", label = "Missing Self-Blessing", group = "Paladin", hasLowWarningToggle = true, defaultThreshold = 30, range = { 0, 600, 10 }, description = "Reminds you to have a Blessing active on yourself when not resting." },
     { id = "paladin_kings", label = "Low Symbol of Kings", group = "Paladin", defaultThreshold = 50, unit = "count", range = { 0, 200, 10 }, description = "Show a warning while resting when your Symbol of Kings count drops below this." },

@@ -45,6 +45,13 @@ local function Check(label, cond, detail)
 end
 local function Has(list, text) for _, v in ipairs(list) do if v == text then return true end end return false end
 
+-- The value of one "/prepped debug" line, e.g. DebugValue(env, "Unknown spell IDs").
+local function DebugValue(env, label)
+    for _, line in ipairs(env.__printed) do
+        if line:sub(1, #label + 4) == "  " .. label .. ": " then return line:sub(#label + 5) end
+    end
+end
+
 -- Loads the addon the way the client does (TOC order, then ADDON_LOADED etc.).
 local function LoadAddon(env)
     local ns = {}
@@ -119,19 +126,18 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     -- Paladin
     local pal = { 20154, 20271, 465, 19740, 25780, 19752, 25782 }
     R("paladin: no buffs, out of combat", { class = "PALADIN", spells = pal, buffs = {}, items = { [21177] = 100 } },
-        { "No Aura Active!", "No Blessing Active!" }, { "No Seal Active!", "Missing Righteous Fury!" })
+        { "No Aura Active!", "No Blessing Active!" }, { "Missing Righteous Fury!" })
     R("paladin: aura + blessing expiring", { class = "PALADIN", spells = pal, buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 20 } } },
         { "Blessing expiring (20s left)" }, { "No Aura Active!", "No Blessing Active!" })
     R("paladin: Blessing of Protection isn't a blessing", { class = "PALADIN", spells = pal, buffs = { { spellId = 465 }, { spellId = 1022, expires = NOW + 8 } } },
         { "No Blessing Active!" })
-    R("paladin: in combat, no seal", { class = "PALADIN", spells = pal, inCombat = true, buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } },
-        { "No Seal Active!" })
-    R("paladin: Seal of Fury counts as a seal", { class = "PALADIN", spells = { 20154, 20423, 20271, 465, 19740 }, inCombat = true,
-        buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 }, { spellId = 20423, expires = NOW + 25 } } }, {}, { "No Seal Active!" })
+    R("paladin: greater blessing counts", { class = "PALADIN", spells = pal, buffs = { { spellId = 465 }, { spellId = 25782, expires = NOW + 3000 } } },
+        {}, { "No Blessing Active!", "Blessing expiring (3000s left)" })
     R("paladin: prot + shield + group, no RF", { class = "PALADIN", spells = pal, inGroup = true, talents = { 5, 31, 10 },
         equipped = { [16] = 2131, [17] = 1201 }, buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, { "Missing Righteous Fury!" })
-    R("paladin: holy talents suppress seal reminder", { class = "PALADIN", spells = pal, inCombat = true, talents = { 31, 5, 0 },
-        buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, {}, { "No Seal Active!" })
+    R("paladin: holy talents = no Righteous Fury reminder", { class = "PALADIN", spells = pal, inGroup = true, talents = { 31, 5, 0 },
+        equipped = { [16] = 2131, [17] = 1201 }, buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } },
+        {}, { "Missing Righteous Fury!" })
     R("paladin: resting, low Symbol of Kings", { class = "PALADIN", spells = pal, resting = true, items = { [21177] = 3 } },
         { "Low on Symbol of Kings (3 left)", "Low on Symbol of Divinity (0 left)" })
     R("paladin: Reagent Economy hides symbols", { class = "PALADIN", spells = pal, resting = true, items = { [21177] = 3 }, reagentEconomy = true },
@@ -156,9 +162,10 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
         {}, { "Low on Sacred Candles (0 left)" })
 
     -- Warrior
-    R("warrior: in combat, no battle shout", { class = "WARRIOR", spells = { 6673 }, inCombat = true, buffs = {} }, { "No Battle Shout Active!" })
-    R("warrior: higher rank shout counts", { class = "WARRIOR", spells = { 6673, 25289 }, inCombat = true, buffs = { { spellId = 25289, expires = NOW + 100 } } },
-        {}, { "No Battle Shout Active!" })
+    R("warrior: resting, low ammo", { class = "WARRIOR", spells = { 6673 }, resting = true, equipped = { [18] = 2504 }, ammoCount = 50 },
+        { "Low on ammo/thrown (50 left)" }, { "No ammo/thrown equipped" })
+    R("warrior: bow without ammo", { class = "WARRIOR", spells = { 6673 }, inCombat = true, equipped = { [18] = 2504 }, ammoCount = 0, buffs = {} },
+        { "No ammo/thrown equipped" }, { "No Battle Shout Active!" })
 
     -- Mage
     R("mage: frost armor ok, AI missing, no gem", { class = "MAGE", spells = { 1459, 168, 759 }, buffs = { { spellId = 168, expires = NOW + 1000 } } },
@@ -207,8 +214,8 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     -- Shaman
     R("shaman: enh, no imbue/shield", { class = "SHAMAN", spells = { 324 }, talents = { 0, 15, 0 }, equipped = { [16] = 2131 },
         enchants = { [0] = { { type = TEMPORARY, ms = 1800000 } } }, buffs = {} }, { "Buff missing: Shield", "Buff missing: Weapon" })
-    R("shaman: imbue + water shield present", { class = "SHAMAN", spells = { 324, 24398 }, talents = { 0, 15, 0 }, equipped = { [16] = 2131 },
-        enchants = { [0] = { { type = IMBUE, ms = 1800000 } } }, buffs = { { spellId = 24398, expires = NOW + 500 } } },
+    R("shaman: imbue + lightning shield present", { class = "SHAMAN", spells = { 324, 10432 }, talents = { 0, 15, 0 }, equipped = { [16] = 2131 },
+        enchants = { [0] = { { type = IMBUE, ms = 1800000 } } }, buffs = { { spellId = 10432, expires = NOW + 500 } } },
         {}, { "Buff missing: Shield", "Buff missing: Weapon" })
     R("shaman: resting, ankh needs Reincarnation", { class = "SHAMAN", spells = { 324, 20608 }, resting = true, items = { [17030] = 1 } },
         { "Low on reagents: Ankh (1 left)" }, { "Low on reagents: Fish Oil (0 left)", "Low on reagents: Fish Scales (0 left)" })
@@ -280,28 +287,38 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
         { "Low on water (7 left)", "Repair your gear" })
     R("druid: bear form still a mana user (water)", { class = "DRUID", spells = {}, resting = true, level = 40, form = 5,
         bags = { { bag = 0, slot = 1, itemID = 159, count = 5 } } }, { "Low on water (5 left)" })
-    R("future (unlearned) spells are ignored", { class = "WARRIOR", spells = {}, futureSpells = { 6673 }, inCombat = true, buffs = {} },
-        {}, { "No Battle Shout Active!" })
+    R("future (unlearned) spells are ignored", { class = "MAGE", spells = {}, futureSpells = { 1459 }, buffs = {} },
+        {}, { "Buff Missing: Arcane Intellect" })
 
-    -- Buff data hidden by combat restrictions ("secret values")
-    R("secret auras: seal check stays quiet", { class = "PALADIN", spells = pal, inCombat = true, aurasSecret = true,
-        buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, {}, { "No Seal Active!", "No Aura Active!", "No Blessing Active!" })
-    R("secret auras, seal never-secret + missing", { class = "PALADIN", spells = pal, inCombat = true, aurasSecret = true, neverSecret = { [20154] = true },
-        buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, { "No Seal Active!" }, { "No Aura Active!", "No Blessing Active!" })
-    R("secret auras, no buffs at all = missing", { class = "WARRIOR", spells = { 6673 }, inCombat = true, aurasSecret = true, buffs = {} },
-        { "No Battle Shout Active!" })
+    -- Buff data hidden during combat: Forever refuses add-on aura scans, so stay quiet
+    local env = R("combat restrictions: no buff reminders", { class = "PALADIN", spells = pal, inCombat = true, aurasSecret = true, buffs = {} },
+        {}, { "No Aura Active!", "No Blessing Active!" })
+    Check(locale .. " combat restrictions: no aura scans attempted", env.__auraScans == 0, env.__auraScans)
+    -- Outside combat restrictions single buffs can be secret: "missing" only when it can't be one of them
+    R("one secret buff: never-secret blessing missing", { class = "PALADIN", spells = pal, secretBuffs = { [465] = true },
+        neverSecret = { [19740] = true }, buffs = { { spellId = 465 } } }, { "No Blessing Active!" }, { "No Aura Active!" })
+    R("one secret buff: could be the blessing", { class = "PALADIN", spells = pal, secretBuffs = { [19740] = true },
+        buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, {}, { "No Blessing Active!", "No Aura Active!" })
 end
 
--- English-only fallback: a Forever seal whose ID isn't listed still counts on English clients
-Run("enUS unlisted Forever seal (English pattern)", { class = "PALADIN", spells = { 20154, 777777, 20271, 465 }, inCombat = true, time = NOW,
-    buffs = { { spellId = 465 }, { spellId = 777777, expires = NOW + 25 } } }, {}, { "No Seal Active!" })
+-- Water Shield (new in Forever) is recognised by its English name until its spell ID is known
+Run("enUS shaman: Water Shield recognised by name", { class = "SHAMAN", spells = { 324, 900001 }, time = NOW,
+    buffs = { { spellId = 900001, expires = NOW + 500 } } }, {}, { "Buff missing: Shield" })
+Run("deDE shaman: Water Shield not recognised yet", { class = "SHAMAN", spells = { 324, 900001 }, time = NOW, locale = "deDE",
+    buffs = { { spellId = 900001, expires = NOW + 500 } } }, { "Buff missing: Shield" })
+
+-- English-only fallback: a Forever teleport whose ID isn't listed still counts on English clients
+Run("enUS unlisted Forever teleport (English pattern)", { class = "MAGE", spells = { 777777 }, resting = true, time = NOW },
+    { "Low on reagents: Rune of Teleportation (0 left!)" })
+Run("deDE unlisted Forever teleport (no English fallback)", { class = "MAGE", spells = { 777777 }, resting = true, time = NOW, locale = "deDE" },
+    {}, { "Low on reagents: Rune of Teleportation (0 left!)" })
 
 ------------------------------------------------------------------------
 -- /prepped debug
 ------------------------------------------------------------------------
 do
     local env = Mock.BuildEnv({ class = "ROGUE", spells = { 1856 }, skills = { [40] = 75 }, time = NOW, reagentEconomy = true,
-        equipped = { [16] = 2131, [18] = 2947 }, rangedDurability = 200, missingSpellIDs = { [24398] = true, [33736] = true },
+        equipped = { [16] = 2131, [18] = 2947 }, rangedDurability = 200, missingSpellIDs = { [2094] = true },
         enchants = { [0] = { { type = IMBUE, ms = 90000, id = 7 }, { type = TEMPORARY, ms = 1800000, id = 13 } } } })
     LoadAddon(env)
     local ok, err = pcall(env.SlashCmdList.PREPPED, "debug")
@@ -312,17 +329,35 @@ do
     Check("debug: thrown durability", out:find("durability 200/200, ammo count nil", 1, true) ~= nil, out)
     Check("debug: poisons skill", out:find("Poisons skill rank: 75", 1, true) ~= nil, out)
     Check("debug: reagent economy", out:find("Reagent Economy perk: yes (Legacy tree)", 1, true) ~= nil, out)
-    Check("debug: unknown spell IDs", out:find("Unknown spell IDs: Shields 24398, Shields 33736", 1, true) ~= nil, out)
+    Check("debug: unknown spell IDs", DebugValue(env, "Unknown spell IDs") == "Blind 2094", DebugValue(env, "Unknown spell IDs"))
+    Check("debug: nothing recognised by name only", out:find("Recognised by name, ID not listed: none", 1, true) ~= nil, out)
     Check("debug: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
 end
 
 do
-    local env = Mock.BuildEnv({ class = "PALADIN", spells = { 20154, 20271, 465, 19740 }, time = NOW, neverSecret = { [20154] = true } })
+    local env = Mock.BuildEnv({ class = "PALADIN", spells = { 20154, 20271, 465, 19740 }, time = NOW, neverSecret = { [19740] = true } })
     LoadAddon(env)
     pcall(env.SlashCmdList.PREPPED, "debug")
     local out = table.concat(env.__printed, "\n")
-    Check("debug: buff visibility per family", out:find("Seals in combat: always visible", 1, true) ~= nil
+    Check("debug: buff visibility per family", out:find("Blessings in combat: always visible", 1, true) ~= nil
         and out:find("Auras in combat: hidden in combat", 1, true) ~= nil, out)
+    -- every spell ID Prepped lists exists in the (Forever) spell data
+    Check("debug: no unknown spell IDs", DebugValue(env, "Unknown spell IDs") == "none", DebugValue(env, "Unknown spell IDs"))
+end
+
+-- Spells recognised only by name show their IDs, so they can be added to Prepped
+for _, case in ipairs({
+    { class = "SHAMAN", spells = { 324, 900001 }, locale = "enUS", expect = "Recognised by name, ID not listed: Water Shield 900001" },
+    { class = "MAGE", spells = { 3561, 777777 }, locale = "enUS", expect = "Recognised by name, ID not listed: Teleport: Stonard 777777" },
+    { class = "DRUID", spells = { 20484, 888888 }, locale = "deDE", expect = "Recognised by name, ID not listed: DE:Rebirth 888888" },
+    -- a druid's "Teleport: Moonglade" isn't a mage teleport
+    { class = "DRUID", spells = { 1126, 18960 }, locale = "enUS", expect = "Recognised by name, ID not listed: none" },
+}) do
+    local env = Mock.BuildEnv({ class = case.class, spells = case.spells, locale = case.locale, time = NOW })
+    LoadAddon(env)
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    local out = table.concat(env.__printed, "\n")
+    Check("debug: " .. case.expect, out:find(case.expect, 1, true) ~= nil, out)
 end
 
 do
@@ -359,6 +394,8 @@ do
         end
         if rule.hasLowWarningToggle then Check("options: warn toggle for " .. rule.id, S[key .. "_LOW"] ~= nil) end
     end
+
+    Check("options: no in-combat-only rules", S.PREPPED_paladin_seal == nil and S.PREPPED_warrior_battle_shout == nil)
 
     -- the "Warn when expiring" row follows its rule's checkbox
     local mageLayout

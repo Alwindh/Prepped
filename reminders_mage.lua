@@ -68,7 +68,6 @@ local mageReminders = {
         id = "mage_mana_gem",
         message = "Missing item: Mana Gem",
         mustRest = false,
-        inCombatOnly = false,
         manaGemCheck = true,
     },
 }

@@ -17,7 +17,8 @@
 --   form                     shapeshift form ID (1 cat, 3 travel, 4 aquatic, 5 bear, ...)
 --   resting, inCombat, mounted, inGroup
 --   ammoCount, rangedCount, rangedDurability, headDurability
---   aurasSecret, neverSecret combat-restricted buff data; { [spellID] = true } stays readable
+--   aurasSecret              buff data hidden (combat): aura scans error, like on Forever
+--   secretBuffs, neverSecret { [spellID] = true }: individually hidden / never-hidden buffs
 --   reagentEconomy           the Legacy perk is learned
 --   missingSpellIDs          { [spellID] = true } the client doesn't know
 --   breakSettings            the Settings API errors
@@ -59,17 +60,16 @@ def("Teleport: Stormwind", 3561); def("Teleport: Ironforge", 3562); def("Telepor
 def("Teleport: Darnassus", 3565); def("Teleport: Thunder Bluff", 3566); def("Teleport: Orgrimmar", 3567)
 def("Portal: Stormwind", 10059); def("Portal: Ironforge", 11416); def("Portal: Orgrimmar", 11417)
 def("Portal: Undercity", 11418); def("Portal: Darnassus", 11419); def("Portal: Thunder Bluff", 11420)
+def("Teleport: Stonard", 777777) -- a Forever-only teleport whose ID Prepped doesn't list
 -- Paladin
 def("Seal of Righteousness", 20154, 21084); def("Seal of Command", 20375); def("Seal of the Crusader", 21082)
 def("Seal of Justice", 20164); def("Seal of Light", 20165); def("Seal of Wisdom", 20166); def("Seal of Fury", 20421, 20423)
-def("Seal of the Ancients", 777777) -- a Forever-only seal whose ID Prepped doesn't list
 def("Judgement", 20271)
 def("Devotion Aura", 465); def("Retribution Aura", 7294); def("Concentration Aura", 19746)
 def("Shadow Resistance Aura", 19876); def("Frost Resistance Aura", 19888); def("Fire Resistance Aura", 19891); def("Sanctity Aura", 20218)
+-- Forever has no Blessing of Light or Sanctuary, and Salvation isn't a blessing any more
 def("Blessing of Might", 19740); def("Blessing of Wisdom", 19742); def("Blessing of Kings", 20217)
-def("Blessing of Salvation", 1038); def("Blessing of Light", 19977); def("Blessing of Sanctuary", 20911)
 def("Greater Blessing of Might", 25782); def("Greater Blessing of Wisdom", 25894); def("Greater Blessing of Kings", 25898)
-def("Greater Blessing of Salvation", 25895); def("Greater Blessing of Light", 25890); def("Greater Blessing of Sanctuary", 25899)
 def("Blessing of Protection", 1022)
 def("Righteous Fury", 25780); def("Divine Intervention", 19752)
 -- Priest
@@ -78,7 +78,8 @@ def("Inner Fire", 588, 7128, 602, 1006, 10951, 10952); def("Prayer of Spirit", 2
 -- Rogue
 def("Vanish", 1856, 1857); def("Poisons", 2842); def("Blind", 2094)
 -- Shaman
-def("Lightning Shield", 324, 325, 905, 945, 8134, 10431, 10432); def("Water Shield", 24398, 33736)
+def("Lightning Shield", 324, 325, 905, 945, 8134, 10431, 10432)
+def("Water Shield", 900001) -- new in Forever; its real spell ID isn't known yet
 def("Reincarnation", 20608); def("Water Walking", 546); def("Water Breathing", 131)
 -- Warrior
 def("Battle Shout", 6673, 5242, 6192, 11549, 11550, 11551, 25289)
@@ -96,6 +97,7 @@ def("Soulstone Resurrection", 20707, 20762, 20763, 20764, 20765)
 -- Druid
 def("Mark of the Wild", 1126, 5232, 6756, 5234, 8907, 9884, 9885); def("Gift of the Wild", 21849, 21850)
 def("Rebirth", 20484, 20739, 20742, 20747, 20748, 888888) -- 888888: a Rebirth rank Prepped doesn't list
+def("Teleport: Moonglade", 18960)
 -- Legacy perks
 def("Reagent Economy", 1262650); def("Some Other Perk", 999999)
 
@@ -366,16 +368,28 @@ function Mock.BuildEnv(S)
         end,
     }
 
-    -- Buffs, with Forever's secret values during combat restrictions
-    local function IsAuraSecret(spellId) return S.aurasSecret == true and not (S.neverSecret and S.neverSecret[spellId]) end
+    -- Buffs. While buff data is hidden (combat), Forever refuses add-on scans with
+    -- an error; outside of that, single buffs can still come back as secret values.
+    local function IsAuraSecret(spellId)
+        if S.neverSecret and S.neverSecret[spellId] then return false end
+        return S.aurasSecret == true or (S.secretBuffs ~= nil and S.secretBuffs[spellId] == true)
+    end
     local function BuffAt(i)
         local b = S.buffs and S.buffs[i]
         if not b then return nil end
         if IsAuraSecret(b.spellId) then return { name = Secret(), spellId = Secret(), expirationTime = Secret(), duration = Secret() } end
         return { name = SpellName(b.spellId), spellId = b.spellId, expirationTime = b.expires or 0, duration = b.duration or 0 }
     end
+    env.__auraScans = 0
     env.C_UnitAuras = {
-        GetAuraDataByIndex = function(unit, i, filter) assert(unit == "player" and filter == "HELPFUL"); return BuffAt(i) end,
+        GetAuraDataByIndex = function(unit, i, filter)
+            assert(unit == "player" and filter == "HELPFUL")
+            env.__auraScans = env.__auraScans + 1
+            if S.aurasSecret then
+                error("GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'prepped'")
+            end
+            return BuffAt(i)
+        end,
         GetPlayerAuraBySpellID = function(id)
             for _, b in ipairs(S.buffs or {}) do if b.spellId == id and not IsAuraSecret(id) then return { spellId = id } end end
         end,
