@@ -50,6 +50,12 @@ local TOTEM_ELEMENTS = {
     }, { class = "SHAMAN" }) },
 }
 
+-- "Fire Totem", "Fire Totem and Air Totem", "Earth Totem, Fire Totem and Air Totem"
+local function JoinNames(names)
+    if #names <= 1 then return names[1] or "" end
+    return table.concat(names, ", ", 1, #names - 1) .. " and " .. names[#names]
+end
+
 -- Names of the totem items you need (you know a totem of that element) but don't carry.
 local function GetMissingTotemItems()
     local missing = {}
@@ -145,7 +151,8 @@ function ShamanReminders.CheckReminders()
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
-            if config.mustRest and not isResting then trigger = false end
+            local value -- amount for the group message (Prepped:BuildGroupMessage)
+            if config.mustRest and not Prepped:IsSupplyTime() then trigger = false end
             if config.mustNotRest and isResting then trigger = false end
             if config.outOfCombat and inCombat then trigger = false end
 
@@ -156,6 +163,7 @@ function ShamanReminders.CheckReminders()
                     trigger = false
                 else
                     displayMessage = (#missing == 1 and "Missing item: " or "Missing items: ") .. table.concat(missing, ", ")
+                    value = { name = JoinNames(missing), count = #missing }
                 end
             end
 
@@ -252,13 +260,10 @@ function ShamanReminders.CheckReminders()
                 end
                 if count >= threshold then trigger = false end
                 displayMessage = string.format(config.message, count)
+                value = count
             end
             if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
+                Prepped:ShowReminder(displayMessage, config.id, value)
             end
         end
     end

@@ -66,7 +66,7 @@ function checks.general_water(config)
     if UnitLevel("player") < Prepped:GetRuleThreshold("general_water_minlevel", 10) then return nil end
     local count = GetWaterCount()
     if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format(config.message, count)
+        return string.format(config.message, count), count
     end
     return nil
 end

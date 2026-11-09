@@ -1,65 +1,37 @@
--- Multi-class reminders module
+-- Multi-class reminders module (repairs)
 local MultiClassReminders = {}
 
 local multiclassReminders = {
-    {
-        id = "general_repair",
-        message = "Repair your gear",
-        repairCheck = true,
-        mustRest = true,
-    },
+    { id = "general_repair", message = "Repair your gear", mustRest = true },
 }
 
--- Checks if the user's equipped gear's average durability is below the configured threshold.
+-- Average durability of your equipped gear, in percent (100 without breakable items).
 local function GetAverageDurability()
-    local totalCurrent = 0
-    local totalMax = 0
-    local itemCount = 0
-    
-    for i = 1, 19 do
-        local current, max = GetInventoryItemDurability(i)
+    local totalCurrent, totalMax = 0, 0
+    for slot = 1, 19 do
+        local current, max = GetInventoryItemDurability(slot)
         if current and max then
             totalCurrent = totalCurrent + current
             totalMax = totalMax + max
-            itemCount = itemCount + 1
         end
     end
-    
-    if totalMax == 0 then return 100 end -- No items or all indestructible
+    if totalMax == 0 then return 100 end
     return (totalCurrent / totalMax) * 100
 end
 
-function MultiClassReminders.CheckReminders()
-    local isResting = IsResting()
-    
-    for _, config in ipairs(multiclassReminders) do
-        if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
-            local trigger = true
-            local displayMessage = config.message
-            
-            if config.mustRest and not isResting then trigger = false end
-            
-            if trigger and config.repairCheck then
-                local threshold = 100
-                if Prepped and Prepped.GetRuleThreshold then
-                    threshold = Prepped:GetRuleThreshold(config.id, 100)
-                end
-                
-                local durability = GetAverageDurability()
-                if durability >= threshold then
-                    trigger = false
-                end
-            end
-            
-            if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
-            end
-        end
+local checks = {}
+
+-- Below the configured percentage; the group message names the percentage.
+function checks.general_repair(config)
+    local durability = GetAverageDurability()
+    if durability < Prepped:GetRuleThreshold(config.id, 100) then
+        return config.message, math.floor(durability)
     end
+    return nil
+end
+
+function MultiClassReminders.CheckReminders()
+    Prepped:RunReminders(multiclassReminders, checks)
 end
 
 if Prepped then

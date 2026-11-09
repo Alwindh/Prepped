@@ -35,10 +35,11 @@ function WarriorReminders.CheckReminders()
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = false
             local displayMessage = config.message
+            local value -- amount for the group message (Prepped:BuildGroupMessage)
             
             -- Basic filters
             local filterPassed = true
-            if config.mustRest and not isResting then filterPassed = false end
+            if config.mustRest and not Prepped:IsSupplyTime() then filterPassed = false end
 
             -- If we already showed a "No Ammo" or "Critical" warning, skip "Low"
             if config.id == "warrior_ammo_low" and criticalTriggered then
@@ -66,6 +67,7 @@ function WarriorReminders.CheckReminders()
                             end
                         end
                         displayMessage = string.format(config.message, count)
+                        value = count
                     end
                 -- No Ammo Check
                 elseif config.noAmmoCheck then
@@ -81,11 +83,7 @@ function WarriorReminders.CheckReminders()
             end
             
             if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
+                Prepped:ShowReminder(displayMessage, config.id, value)
             end
         end
     end

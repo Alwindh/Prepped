@@ -90,10 +90,11 @@ local function AddRule(category, layout, rule)
         warnInitializer:SetParentInitializer(enabledInitializer, function() return enabled:GetValue() end)
         layout:AddInitializer(warnInitializer)
     elseif rule.defaultThreshold then
-        local threshold = ThresholdSetting(category, rule, "_THRESHOLD", SLIDER_LABELS[rule.unit] or rule.label)
+        local sliderLabel = rule.sliderLabel or SLIDER_LABELS[rule.unit] or rule.label
+        local threshold = ThresholdSetting(category, rule, "_THRESHOLD", sliderLabel)
         layout:AddInitializer(CreateSettingsCheckboxSliderInitializer(
             enabled, rule.label, rule.description,
-            threshold, SliderOptions(rule, rule.unit), SLIDER_LABELS[rule.unit] or rule.label, rule.description))
+            threshold, SliderOptions(rule, rule.unit), sliderLabel, rule.description))
     else
         Settings.CreateCheckbox(category, enabled, rule.description)
     end
@@ -168,6 +169,10 @@ local function BuildGeneralPage(category, layout)
     AddRule(category, layout, Prepped:GetRule("general_water"))
     AddRule(category, layout, Prepped:GetRule("general_water_minlevel"))
     AddRule(category, layout, Prepped:GetRule("general_repair"))
+
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Groups"))
+    AddRule(category, layout, Prepped:GetRule("general_group_check"))
+    AddRule(category, layout, Prepped:GetRule("general_group_announce"))
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Leveling"))
     AddRule(category, layout, Prepped:GetRule("general_food"))

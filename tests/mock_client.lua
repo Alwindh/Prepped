@@ -15,7 +15,8 @@
 --   skills, talents          { [skillLineID] = rank }, { points in tree 1, 2, 3 }
 --   pet                      { dead, happiness, foodTypes, canEat = { [itemID] = true } }
 --   form                     shapeshift form ID (1 cat, 3 travel, 4 aquatic, 5 bear, ...)
---   resting, inCombat, mounted, inGroup, xpDisabled
+--   resting, inCombat, mounted, dead, inGroup, inRaid, instanceGroup, xpDisabled
+--   chatLockdown             Forever blocks add-on chat messages (combat restrictions)
 --   ammoCount, rangedCount, rangedDurability, headDurability
 --   aurasSecret              buff data hidden (combat): aura scans error, like on Forever
 --   secretBuffs, neverSecret { [spellID] = true }: individually hidden / never-hidden buffs
@@ -152,7 +153,7 @@ function Mock.BuildEnv(S)
     env.__printed, env.__errors = printed, errors
 
     -- Frames (strict: unknown fields are nil, like on real frames) -------
-    local eventFrames = {}
+    local eventFrames, updateFrames = {}, {}
     local Methods = {}
     local NOOP = function() end
     local NOOP_METHODS = {}
@@ -175,7 +176,10 @@ function Mock.BuildEnv(S)
     function Methods:Hide() self.__shown = false end
     function Methods:IsShown() return self.__shown end
     function Methods:GetName() return self.__name end
-    function Methods:SetScript(k, f) self.__scripts[k] = f end
+    function Methods:SetScript(k, f)
+        self.__scripts[k] = f
+        if k == "OnUpdate" then updateFrames[self] = f and true or nil end
+    end
     function Methods:GetScript(k) return self.__scripts[k] end
     function Methods:RegisterEvent(ev) self.__events[ev] = true; eventFrames[self] = true end
     function Methods:RegisterUnitEvent(ev, ...) self.__events[ev] = { ... }; eventFrames[self] = true end
@@ -206,6 +210,25 @@ function Mock.BuildEnv(S)
             if matches and f.__scripts.OnEvent then f.__scripts.OnEvent(f, event, ...) end
         end
     end
+
+    -- Lets time pass: advances GetTime() and runs every OnUpdate script, in 0.1 s steps.
+    env.__tick = function(seconds)
+        for _ = 1, math.floor(seconds * 10 + 0.5) do
+            S.time = (S.time or 1000) + 0.1
+            for f in pairs(updateFrames) do f.__scripts.OnUpdate(f, 0.1) end
+        end
+    end
+
+    -- Group chat: messages the add-on sends are kept in env.__chat
+    env.__chat = {}
+    env.C_ChatInfo = {
+        SendChatMessage = function(message, chatType)
+            assert(type(message) == "string" and #message <= 255, "chat message too long")
+            env.__chat[#env.__chat + 1] = { message = message, chatType = chatType }
+        end,
+        InChatMessagingLockdown = function() return S.chatLockdown == true end,
+    }
+    env.LE_PARTY_CATEGORY_HOME, env.LE_PARTY_CATEGORY_INSTANCE = 1, 2
 
     -- Settings API (Options > AddOns) ------------------------------------
     env.__opened, env.__popups = {}, {}
@@ -299,13 +322,20 @@ function Mock.BuildEnv(S)
     end
     env.GetShapeshiftFormID = function() return S.form end
     env.IsResting = function() return S.resting == true end
-    env.UnitIsDeadOrGhost = function() return false end
+    env.UnitIsDeadOrGhost = function() return S.dead == true end
     env.UnitOnTaxi = function() return false end
     env.UnitAffectingCombat = function() return S.inCombat == true end
     env.InCombatLockdown = function() return S.inCombat == true end
     env.IsMounted = function() return S.mounted == true end
-    env.IsInGroup = function() return S.inGroup == true end
-    env.GetNumGroupMembers = function() return S.inGroup and 5 or 0 end
+    env.IsInGroup = function(category)
+        if category == 2 then return S.instanceGroup == true end
+        return S.inGroup == true or S.inRaid == true or S.instanceGroup == true
+    end
+    env.IsInRaid = function(category)
+        if category == 2 then return false end
+        return S.inRaid == true
+    end
+    env.GetNumGroupMembers = function() return (S.inGroup or S.inRaid or S.instanceGroup) and 5 or 0 end
     env.UnitExists = function(u) return u == "player" or (u == "pet" and S.pet ~= nil) end
     env.UnitIsDead = function(u) return u == "pet" and S.pet and S.pet.dead or false end
     env.GetInventoryItemID = function(_, slot) return S.equipped and S.equipped[slot] end

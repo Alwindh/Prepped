@@ -41,7 +41,7 @@ local function CheckReagent(config)
     if not API.KnowsFamily(config.family) or API.HasReagentEconomy() then return nil end
     local count, name = API.CountReagentForKnownSpell(config.reagents)
     if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format("Low on %s (%d left)", name or config.fallbackName, count)
+        return string.format("Low on %s (%d left)", name or config.fallbackName, count), { name = name or config.fallbackName, count = count }
     end
     return nil
 end

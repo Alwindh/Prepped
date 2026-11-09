@@ -8,6 +8,7 @@
 - **Reagents and supplies**: water, ammo, Soul Shards, candles, Rebirth seeds, Symbols, Runes, Ankhs, poisons and more, for the spells you actually know. With Forever's Reagent Economy perk, vendor reagents are hidden automatically.
 - **Your own buffs**: Mark of the Wild, Fortitude, Inner Fire, Arcane Intellect, armors, Aspects, Auras, Blessings and shields, when they're missing or about to run out.
 - **Things you leave behind**: totems in the bank, no Healthstone or Soulstone, no pet or demon out, no poison or imbue on your weapon.
+- **Joining a group**: your supply reminders on screen for a minute, and one line in group chat about what you're low on.
 - **Leveling in Forever**: keep your food buff (Well Fed, +5% kill XP) and Camp Benefits up.
 - **Repairs** when your gear gets worn.
 
@@ -19,7 +20,7 @@ Reminders stay out of your way: supply reminders show up in cities and inns wher
 
 Prepped's options live in the game's own settings: **Options → AddOns → Prepped**. Open them with `/prepped` or from the AddOns menu on the minimap.
 
-- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water, repair, food buff and camp reminders, and **Reset All Settings**.
+- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water and repair reminders, the group options, the food buff and camp reminders, and **Reset All Settings**.
 - **Appearance**: font size, minimum bar width, text color, background color and background opacity.
 - **One page per class** (Druid, Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warlock, Warrior): every reminder can be switched on or off. Stock reminders have a slider for the amount to warn at; buff reminders have an extra **Warn when expiring** option with a seconds slider.
 
@@ -33,6 +34,8 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
 - **Water Reminder**: Reminds mana users (also druids in Bear or Cat Form) to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
 - **Missing Food Buff**: While leveling, reminds you to keep a food buff (**Well Fed**) up when you're not resting, not in combat and not mounted (or in Travel Form / Ghost Wolf). In Forever, cooked food also gives +5% experience from kills. Off at max level or with experience turned off; optional early warning before it runs out.
+- **Check Supplies When Joining a Group**: When you join a party or raid, your supply reminders (reagents, ammo, repairs and so on) show for a minute even outside cities and inns, so you can restock before you head in. Only you see them.
+- **Tell My Group**: When you join a party or raid, Prepped posts one line in group chat about what you're low on, for example `[Prepped] you're at 47% durability, remember to repair soon.` It names up to three things, posts once per group, waits until you're out of combat, and only mentions durability below 50% (adjustable). Turn it off on the Prepped options page if you'd rather not.
 - **Missing Camp Benefits**: Same conditions as the food buff: while leveling, reminds you to get **Camp Benefits** (sit at a camp for a minute; it combines the buffs of the camp's objects and lasts an hour). Optional early warning, by default 5 minutes before it runs out.
 
 ### Druid
@@ -126,7 +129,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Reagent Economy perk**: If you have this Legacy perk, Prepped detects it and hides the reminders for vendor reagents (Arcane Powder, Runes, Ankhs, Symbols, Flash Powder, candles, Rebirth seeds, Wild Berries/Thornroot, …). Soul Shards and Blinding Powder aren't sold by vendors, so those reminders stay.
 - **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English). The exception is Water Shield, until its Forever spell ID is known.
 - **Spec detection** (Protection Paladin, Enhancement Shaman) uses the points spent in each talent tree.
-- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, the buffs on you with their spell IDs, which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, and spells Prepped only recognises by name (their IDs can then be added).
+- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, the buffs on you with their spell IDs, which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, spells Prepped only recognises by name (their IDs can then be added), and the line it would post when you join a group.
 
 ---
 

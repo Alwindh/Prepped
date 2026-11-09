@@ -82,10 +82,11 @@ function MageReminders.CheckReminders()
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
+            local value -- amount for the group message (Prepped:BuildGroupMessage)
 
             -- Resting check
             if config.mustRest ~= nil then
-                if config.mustRest and not isResting then trigger = false end
+                if config.mustRest and not Prepped:IsSupplyTime() then trigger = false end
                 if not config.mustRest and isResting then trigger = false end
             end
 
@@ -125,6 +126,7 @@ function MageReminders.CheckReminders()
                     trigger = false
                 else
                     displayMessage = string.format(config.message, count)
+                    value = count
                 end
             end
 
@@ -153,11 +155,7 @@ function MageReminders.CheckReminders()
             end
 
             if trigger then
-                local line = Prepped:GetNextLine()
-                if line then
-                    line.text:SetText(displayMessage)
-                    line:Show()
-                end
+                Prepped:ShowReminder(displayMessage, config.id, value)
             end
         end
     end
