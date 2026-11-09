@@ -8,7 +8,7 @@
 
 Prepped's options live in the game's own settings: **Options → AddOns → Prepped**. Open them with `/prepped` or from the AddOns menu on the minimap.
 
-- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water, repair and food buff reminders, and **Reset All Settings**.
+- **Prepped** (main page): master toggle, account-wide vs. per-character settings, welcome message, water, repair, food buff and camp reminders, and **Reset All Settings**.
 - **Appearance**: font size, minimum bar width, text color, background color and background opacity.
 - **One page per class** (Druid, Hunter, Mage, Paladin, Priest, Rogue, Shaman, Warlock, Warrior): every reminder can be switched on or off. Stock reminders have a slider for the amount to warn at; buff reminders have an extra **Warn when expiring** option with a seconds slider.
 
@@ -22,6 +22,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
 - **Water Reminder**: Reminds mana users (also druids in Bear or Cat Form) to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
 - **Missing Food Buff**: While leveling, reminds you to keep a food buff (**Well Fed**) up when you're not resting, not in combat and not mounted (or in Travel Form / Ghost Wolf). In Forever, cooked food also gives +5% experience from kills. Off at max level or with experience turned off; optional early warning before it runs out.
+- **Missing Camp Benefits**: Same conditions as the food buff: while leveling, reminds you to get **Camp Benefits** (sit at a camp for a minute; it combines the buffs of the camp's objects and lasts an hour). Optional early warning, by default 5 minutes before it runs out.
 
 ### Druid
 - **Missing Mark of the Wild**: Alerts you when neither Mark of the Wild nor Gift of the Wild is on you (not while resting, mounted or in Travel/Aquatic/Flight Form).

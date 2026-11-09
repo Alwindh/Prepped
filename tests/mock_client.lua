@@ -48,6 +48,7 @@ local SPELLS = {}
 local function def(name, ...) for _, id in ipairs({ ... }) do SPELLS[id] = name end end
 def("Drink", 430, 431, 432, 1133, 1135, 1137)
 def("Well Fed", 1248406, 19705, 19706, 19708, 19709, 19710, 19711, 24799) -- 1248406: Forever's cooked food
+def("Camp Benefits", 1229741)
 -- Hunter
 def("Tame Beast", 1515)
 def("Aspect of the Hawk", 13165, 14318, 14319, 14320, 14321, 14322, 25296)

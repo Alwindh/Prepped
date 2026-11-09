@@ -12,6 +12,9 @@ local WELL_FED = API.SpellFamily("Well Fed", {
     19705, 19706, 19708, 19709, 19710, 19711, 24799, -- Well Fed (older foods)
 }, { aura = true })
 local IsFoodBuff = API.Matcher(WELL_FED)
+-- Sitting at a camp for a minute combines the buffs of its objects into "Camp Benefits" (1 hour).
+local CAMP_BENEFITS = API.SpellFamily("Camp Benefits", { 1229741 }, { aura = true })
+local IsCampBuff = API.Matcher(CAMP_BENEFITS)
 
 local generalReminders = {
     { id = "general_water", message = "Low on water (%s left)", mustRest = true },
@@ -19,6 +22,13 @@ local generalReminders = {
         id = "general_food",
         message = "Missing food buff (Well Fed)",
         messageLow = "Food buff expiring (%ss left)",
+        mustNotRest = true,
+        outOfCombat = true,
+    },
+    {
+        id = "general_camp",
+        message = "Missing Camp Benefits",
+        messageLow = "Camp Benefits expiring (%ss left)",
         mustNotRest = true,
         outOfCombat = true,
     },
@@ -61,11 +71,16 @@ function checks.general_water(config)
     return nil
 end
 
--- While leveling; not while mounted or in a travel form.
-function checks.general_food(config)
-    if API.IsTraveling() or not API.IsLeveling() then return nil end
-    return Prepped:CheckTimedBuff(config.id, IsFoodBuff, config.message, config.messageLow)
+-- Buffs worth keeping up while leveling; not while mounted or in a travel form.
+local function LevelingBuff(matcher)
+    return function(config)
+        if API.IsTraveling() or not API.IsLeveling() then return nil end
+        return Prepped:CheckTimedBuff(config.id, matcher, config.message, config.messageLow)
+    end
 end
+
+checks.general_food = LevelingBuff(IsFoodBuff)
+checks.general_camp = LevelingBuff(IsCampBuff)
 
 function GeneralReminders.CheckReminders()
     Prepped:RunReminders(generalReminders, checks)
