@@ -70,6 +70,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
 
 ### Shaman
+- **Missing Totem Items**: Totems in Forever still need their element's totem item in your bags. Prepped warns you (out of combat) when the **Earth, Fire, Water or Air Totem** for totems you know is missing, for example after leaving it in the bank.
 - **Missing Shield**: Alerts if Lightning Shield (or Water Shield) is missing. Water Shield is new in Forever and is only recognised on English clients until its spell ID is known.
 - **Weapon Imbues**: Smart tracking for Rockbiter, Flametongue, Frostbrand, and Windfury. 
   - *Note: Only triggers for Enhancement/Leveling Shamans and is dual-wield aware. Sharpening stones and oils don't count as an imbue.*

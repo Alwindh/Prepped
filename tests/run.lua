@@ -219,6 +219,17 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
         {}, { "Buff missing: Shield", "Buff missing: Weapon" })
     R("shaman: resting, ankh needs Reincarnation", { class = "SHAMAN", spells = { 324, 20608 }, resting = true, items = { [17030] = 1 } },
         { "Low on reagents: Ankh (1 left)" }, { "Low on reagents: Fish Oil (0 left)", "Low on reagents: Fish Scales (0 left)" })
+    R("shaman: totem items left in the bank", { class = "SHAMAN", spells = { 324, 8071, 3599, 5394 }, items = { [5175] = 1 } },
+        { "Missing items: Fire Totem, Water Totem" }, { "Missing item: Earth Totem" })
+    R("shaman: one totem item missing, also while resting", { class = "SHAMAN", spells = { 8071, 10438, 8177 }, resting = true,
+        items = { [5175] = 1, [5176] = 1 } }, { "Missing item: Air Totem" })
+    R("shaman: all totem items carried", { class = "SHAMAN", spells = { 8071, 3599, 5394, 8177 },
+        items = { [5175] = 1, [5176] = 1, [5177] = 1, [5178] = 1 } },
+        {}, { "Missing item: Earth Totem", "Missing item: Fire Totem", "Missing item: Water Totem", "Missing item: Air Totem" })
+    R("shaman: unlisted totem rank counts by name", { class = "SHAMAN", spells = { 900002 } }, { "Missing item: Fire Totem" })
+    R("shaman: totem reminder waits until out of combat", { class = "SHAMAN", spells = { 8071 }, inCombat = true, buffs = {} },
+        {}, { "Missing item: Earth Totem" })
+    R("shaman: no totems learned, no totem reminder", { class = "SHAMAN", spells = { 324 } }, {}, { "Missing item: Earth Totem" })
     R("shaman: elemental skips weapon imbue", { class = "SHAMAN", spells = { 324 }, talents = { 20, 5, 0 }, equipped = { [16] = 2131 },
         buffs = { { spellId = 324, expires = NOW + 500 } } }, {}, { "Buff missing: Weapon", "Buff missing: Shield" })
 

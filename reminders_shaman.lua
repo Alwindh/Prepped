@@ -15,6 +15,54 @@ local WATER_BREATHING = API.SpellFamily("Water Breathing", { 131 }, { class = "S
 
 local IsShield = API.Matcher(SHIELDS)
 
+-- Totems still need their element's totem item in your bags in Forever
+-- (quest rewards at level 4, 10, 20 and 30). An element counts once you know
+-- any of its totems.
+local TOTEM_ELEMENTS = {
+    { name = "Earth Totem", item = 5175, family = API.SpellFamily("Earth totems", {
+        8071, 8154, 8155, 10406, 10407, 10408, -- Stoneskin Totem
+        2484,                                  -- Earthbind Totem
+        5730, 6390, 6391, 6392, 10427, 10428,  -- Stoneclaw Totem
+        8075, 8160, 8161, 10442, 25361,        -- Strength of Earth Totem
+        8143,                                  -- Tremor Totem
+    }, { class = "SHAMAN" }) },
+    { name = "Fire Totem", item = 5176, family = API.SpellFamily("Fire totems", {
+        3599, 6363, 6364, 6365, 10437, 10438,  -- Searing Totem
+        1535, 8498, 8499, 11314, 11315,        -- Fire Nova Totem
+        8181, 10478, 10479,                    -- Frost Resistance Totem
+        8190, 10585, 10586, 10587,             -- Magma Totem
+        8227, 8249, 10526, 16387,              -- Flametongue Totem
+    }, { class = "SHAMAN" }) },
+    { name = "Water Totem", item = 5177, family = API.SpellFamily("Water totems", {
+        5394, 6375, 6377, 10462, 10463,        -- Healing Stream Totem
+        5675, 10495, 10496, 10497,             -- Mana Spring Totem
+        8166,                                  -- Poison Cleansing Totem
+        8170,                                  -- Disease Cleansing Totem
+        8184, 10537, 10538,                    -- Fire Resistance Totem
+        16190, 17354, 17359,                   -- Mana Tide Totem
+    }, { class = "SHAMAN" }) },
+    { name = "Air Totem", item = 5178, family = API.SpellFamily("Air totems", {
+        8177,                                  -- Grounding Totem
+        10595, 10600, 10601,                   -- Nature Resistance Totem
+        8512, 10613, 10614,                    -- Windfury Totem
+        8835, 10627, 25359,                    -- Grace of Air Totem
+        15107, 15111, 15112,                   -- Windwall Totem
+        6495,                                  -- Sentry Totem
+        25908,                                 -- Tranquil Air Totem
+    }, { class = "SHAMAN" }) },
+}
+
+-- Names of the totem items you need (you know a totem of that element) but don't carry.
+local function GetMissingTotemItems()
+    local missing = {}
+    for _, element in ipairs(TOTEM_ELEMENTS) do
+        if API.KnowsFamily(element.family) and C_Item.GetItemCount(element.item) == 0 then
+            missing[#missing + 1] = element.name
+        end
+    end
+    return missing
+end
+
 -- Talent tree order
 local TREE_ELEMENTAL = 1
 local TREE_RESTORATION = 3
@@ -49,6 +97,11 @@ local function IsDualWielding()
 end
 
 local shamanReminders = {
+    {
+        id = "shaman_totems",
+        outOfCombat = true,
+        totemCheck = true,
+    },
     {
         id = "shaman_shield_buff",
         message = "Buff missing: Shield",
@@ -89,12 +142,24 @@ function ShamanReminders.CheckReminders()
     local _, playerClass = UnitClass("player")
     if playerClass ~= "SHAMAN" then return end
     local isResting = IsResting()
+    local inCombat = UnitAffectingCombat("player") or InCombatLockdown()
     for _, config in ipairs(shamanReminders) do
         if not (Prepped and config.id and not Prepped:IsRuleEnabled(config.id)) then
             local trigger = true
             local displayMessage = config.message
             if config.mustRest and not isResting then trigger = false end
             if config.mustNotRest and isResting then trigger = false end
+            if config.outOfCombat and inCombat then trigger = false end
+
+            -- Totem Items Check (e.g. a totem left in the bank)
+            if trigger and config.totemCheck then
+                local missing = GetMissingTotemItems()
+                if #missing == 0 then
+                    trigger = false
+                else
+                    displayMessage = (#missing == 1 and "Missing item: " or "Missing items: ") .. table.concat(missing, ", ")
+                end
+            end
 
             -- Spell Learned Check (reagents only matter once the spell that uses them is learned)
             if trigger and config.requiredFamily then

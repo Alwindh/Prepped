@@ -81,6 +81,18 @@ def("Vanish", 1856, 1857); def("Poisons", 2842); def("Blind", 2094)
 def("Lightning Shield", 324, 325, 905, 945, 8134, 10431, 10432)
 def("Water Shield", 900001) -- new in Forever; its real spell ID isn't known yet
 def("Reincarnation", 20608); def("Water Walking", 546); def("Water Breathing", 131)
+def("Stoneskin Totem", 8071, 8154, 8155, 10406, 10407, 10408); def("Earthbind Totem", 2484)
+def("Stoneclaw Totem", 5730, 6390, 6391, 6392, 10427, 10428); def("Strength of Earth Totem", 8075, 8160, 8161, 10442, 25361)
+def("Tremor Totem", 8143)
+def("Searing Totem", 3599, 6363, 6364, 6365, 10437, 10438, 900002) -- 900002: a rank Prepped doesn't list
+def("Fire Nova Totem", 1535, 8498, 8499, 11314, 11315); def("Frost Resistance Totem", 8181, 10478, 10479)
+def("Magma Totem", 8190, 10585, 10586, 10587); def("Flametongue Totem", 8227, 8249, 10526, 16387)
+def("Healing Stream Totem", 5394, 6375, 6377, 10462, 10463); def("Mana Spring Totem", 5675, 10495, 10496, 10497)
+def("Poison Cleansing Totem", 8166); def("Disease Cleansing Totem", 8170); def("Fire Resistance Totem", 8184, 10537, 10538)
+def("Mana Tide Totem", 16190, 17354, 17359)
+def("Grounding Totem", 8177); def("Nature Resistance Totem", 10595, 10600, 10601); def("Windfury Totem", 8512, 10613, 10614)
+def("Grace of Air Totem", 8835, 10627, 25359); def("Windwall Totem", 15107, 15111, 15112); def("Sentry Totem", 6495)
+def("Tranquil Air Totem", 25908)
 -- Warrior
 def("Battle Shout", 6673, 5242, 6192, 11549, 11550, 11551, 25289)
 -- Warlock

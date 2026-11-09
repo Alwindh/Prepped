@@ -451,6 +451,7 @@ Prepped.AllRules = {
     { id = "mage_armor_buff", label = "Missing Armor Buff", group = "Mage", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "Reminds you to buff yourself with an Armor buff." },
     { id = "mage_mana_gem", label = "Missing Mana Gem", group = "Mage", description = "Reminds you to conjure a Mana Gem if you are not resting and don't have one." },
 
+    { id = "shaman_totems", label = "Missing Totem Items", group = "Shaman", description = "Show a warning out of combat when the Earth, Fire, Water or Air Totem item for totems you know isn't in your bags (for example when it's still in the bank)." },
     { id = "shaman_ankh", label = "Buy Ankhs", group = "Shaman", defaultThreshold = 8, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Ankh count drops below this." },
     { id = "shaman_fish_oil", label = "Buy Fish Oil", group = "Shaman", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Fish Oil count drops below this." },
     { id = "shaman_fish_scales", label = "Buy Fish Scales", group = "Shaman", defaultThreshold = 10, unit = "count", range = { 0, 40, 1 }, description = "Show a warning while resting when your Fish Scales count drops below this." },
