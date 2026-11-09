@@ -2,6 +2,17 @@
 
 **Prepped** is a modular, "set-it-and-forget-it" reminder addon for **WoW Forever** (interface `16001`). It helps you avoid common mistakes—like walking into a dungeon without water or pulling a boss without your pet—by providing clear, non-intrusive, and highly configurable alerts.
 
+**Download:** [CurseForge](https://www.curseforge.com/wow/addons/prepped) (also in WowUp) · [GitHub releases](https://github.com/Alwindh/Prepped/releases/latest) · **Bugs and ideas:** [GitHub issues](https://github.com/Alwindh/Prepped/issues)
+
+### At a glance
+- **Reagents and supplies**: water, ammo, Soul Shards, candles, Rebirth seeds, Symbols, Runes, Ankhs, poisons and more, for the spells you actually know. With Forever's Reagent Economy perk, vendor reagents are hidden automatically.
+- **Your own buffs**: Mark of the Wild, Fortitude, Inner Fire, Arcane Intellect, armors, Aspects, Auras, Blessings and shields, when they're missing or about to run out.
+- **Things you leave behind**: totems in the bank, no Healthstone or Soulstone, no pet or demon out, no poison or imbue on your weapon.
+- **Leveling in Forever**: keep your food buff (Well Fed, +5% kill XP) and Camp Benefits up.
+- **Repairs** when your gear gets worn.
+
+Reminders stay out of your way: supply reminders show up in cities and inns where you can restock, buff reminders while you're out adventuring.
+
 ---
 
 ## Configuration and Options
@@ -32,7 +43,8 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **"Warn if Low"**: Optional early warning before Mark of the Wild runs out.
 
 ### Hunter
-- **Critical Ammo**: A "Red Alert" that shows anytime your ammo drops below a critical point (e.g., 200).
+- **Missing Ammo**: Alerts you when you have a ranged weapon equipped but no ammo.
+- **Critical Ammo**: A "Red Alert" while you're out adventuring when your ammo drops below a critical point (e.g., 200).
 - **Low Ammo**: A reminder to stock up while **resting** if you have less than your desired stock (e.g., 1000).
 - **Missing Aspect**: Alerts you if you don't have an Aspect active (Hawk, Monkey, Cheetah, etc.).
 - **Missing Pet**: Warns you if your pet isn't out (only if you know *Tame Beast*).
@@ -40,7 +52,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Low Pet Food**: Alerts you while **resting** if you have fewer than your configured amount of food items in your bags that your pet can actually eat.
 
 ### Mage
-- **Missing Arcane Intellect**: Detects if you or your group are missing Intellect.
+- **Missing Arcane Intellect**: Alerts you when Arcane Intellect (or Arcane Brilliance) isn't on you.
 - **Missing Armor Buff**: Reminds you to apply Frost, Ice, or Mage Armor.
 - **Missing Mana Gem**: Alerts you to conjure a Mana Gem if you have the spell but no gem in your bags.
 - **Reagent Tracking**: Optional warnings while **resting** if you are low on:
@@ -70,6 +82,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Low Blinding Powder**: Reminds you to make or buy Blinding Powder while **resting** if you know *Blind* (default: 5).
 - **Low Poison Stock**: Warns you while **resting** if your total poison count is low (default: 20, checks all poison types).
 - **"Warn if Low"**: Optional early warning for weapon poisons—get notified before they expire (default: 60 seconds).
+- *Thrown weapons with durability never run out in Forever, so they don't trigger ammo reminders.*
 
 ### Shaman
 - **Missing Totem Items**: Totems in Forever still need their element's totem item in your bags. Prepped warns you (out of combat) when the **Earth, Fire, Water or Air Totem** for totems you know is missing, for example after leaving it in the bank.
@@ -94,6 +107,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Missing Ammo/Thrown**: Alerts you if you have a ranged weapon equipped but no ammo or thrown weapon charges.
 - **Critical Ammo**: A "Red Alert" for when your ranged supplies are nearly empty.
 - **Low Ammo**: A convenience reminder to stock up while resting.
+- *Thrown weapons with durability never run out in Forever, so they don't trigger ammo reminders.*
 
 ---
 
@@ -101,7 +115,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 
 - **Dynamic Logic**: Reminders only appear if you have learned the required spells and are at a relevant level.
 - **Resting Awareness**: Supply and repair reminders stay hidden while you are adventuring, only appearing when you reach a City or Inn.
-- **Combat & Movement Safety**: Reminders are automatically suppressed while you are dead, on a taxi, or (for certain buffs) while mounted.
+- **Combat & Movement Safety**: Reminders are automatically suppressed while you are dead or on a taxi, and buff reminders while you're mounted or in a travel form.
 - **Non-Overlapping UI**: Alerts stack vertically and resize themselves to ensure every message is readable without cluttering your screen.
 
 ---
@@ -118,10 +132,14 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 
 ## Installation
 
-1. Download the latest release.
-2. Extract the folder into `World of Warcraft/_forever_/Interface/AddOns/`.
-3. Ensure the folder is named exactly `Prepped`.
-4. (Optional) Install via **CurseForge** or **WowUP** for automatic updates.
+- **CurseForge app or WowUp** (recommended, updates automatically): search for **Prepped**, or open the [CurseForge page](https://www.curseforge.com/wow/addons/prepped).
+- **Manually**: download `Prepped.zip` from the [latest GitHub release](https://github.com/Alwindh/Prepped/releases/latest) and extract it into `World of Warcraft/_forever_/Interface/AddOns/`, so the folder is named exactly `Prepped`.
+
+---
+
+## Feedback
+
+Found a bug or missing a reminder? Open an [issue on GitHub](https://github.com/Alwindh/Prepped/issues). For anything that looks wrong in-game, add the output of `/prepped debug`: it shows what Prepped sees on your character.
 
 ---
 
