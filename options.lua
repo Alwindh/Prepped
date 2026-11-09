@@ -169,6 +169,9 @@ local function BuildGeneralPage(category, layout)
     AddRule(category, layout, Prepped:GetRule("general_water_minlevel"))
     AddRule(category, layout, Prepped:GetRule("general_repair"))
 
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Leveling"))
+    AddRule(category, layout, Prepped:GetRule("general_food"))
+
     layout:AddInitializer(CreateSettingsButtonInitializer("Reset All Settings", RESET,
         function() StaticPopup_Show("PREPPED_RESET_ALL_SETTINGS") end,
         "Reset every Prepped setting, profile and appearance option to its default.", true))

@@ -171,7 +171,8 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("mage: frost armor ok, AI missing, no gem", { class = "MAGE", spells = { 1459, 168, 759 }, buffs = { { spellId = 168, expires = NOW + 1000 } } },
         { "Buff Missing: Arcane Intellect", "Missing item: Mana Gem" }, { "Buff Missing: Mage Armor" })
     R("mage: resting, reagents low", { class = "MAGE", spells = { 1459, 23028, 3561, 10059 }, resting = true, items = { [17020] = 2 } },
-        { "Low on reagents: Arcane Powder (2 left!)", "Low on reagents: Rune of Teleportation (0 left!)", "Low on reagents: Rune of Portals (0 left!)" })
+        { "Low on reagents: Arcane Powder (2 left!)", "Low on reagents: Rune of Teleportation (0 left!)", "Low on reagents: Rune of Portals (0 left!)" },
+        { "Low on water (0 left)" }) -- mages conjure their own
     R("mage: Reagent Economy hides reagents", { class = "MAGE", spells = { 1459, 23028, 3561, 10059 }, resting = true, items = { [17020] = 2 }, reagentEconomy = true },
         {}, { "Low on reagents: Arcane Powder (2 left!)", "Low on reagents: Rune of Teleportation (0 left!)", "Low on reagents: Rune of Portals (0 left!)" })
 
@@ -203,7 +204,7 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("rogue: no Poisons skill = no poison reminders", { class = "ROGUE", spells = { 1856 }, resting = true, equipped = { [16] = 2131 }, items = { [5140] = 20 } },
         {}, { "Low on Poison (0 total)" })
     R("rogue: resting, low stock + powder", { class = "ROGUE", spells = { 1856 }, skills = { [40] = 120 }, resting = true, equipped = { [16] = 2131 },
-        items = { [6947] = 5, [5140] = 3 } }, { "Low on Poison (5 total)", "Low on Flash Powder (3 left)" })
+        items = { [6947] = 5, [5140] = 3 } }, { "Low on Poison (5 total)", "Low on Flash Powder (3 left)" }, { "Low on water (0 left)" })
     R("rogue: low Blinding Powder", { class = "ROGUE", spells = { 1856, 2094 }, resting = true, items = { [5140] = 20, [5530] = 2 } },
         { "Low on Blinding Powder (2 left)" })
     R("rogue: Reagent Economy keeps Blinding Powder", { class = "ROGUE", spells = { 1856, 2094 }, resting = true, reagentEconomy = true,
@@ -292,10 +293,25 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("druid: Reagent Economy hides reagents", { class = "DRUID", spells = { 20484, 21849 }, resting = true, reagentEconomy = true },
         {}, { "Low on Maple Seeds (0 left)", "Low on Wild Berries (0 left)" })
 
+    -- Everyone: food buff while leveling
+    R("leveling: no food buff", { class = "WARRIOR", level = 30, buffs = {} }, { "Missing food buff (Well Fed)" })
+    R("leveling: Well Fed up", { class = "WARRIOR", level = 30, buffs = { { spellId = 19710, expires = NOW + 600 } } },
+        {}, { "Missing food buff (Well Fed)", "Food buff expiring (600s left)" })
+    R("leveling: food buff expiring", { class = "MAGE", level = 30, buffs = { { spellId = 24799, expires = NOW + 30 } } },
+        { "Food buff expiring (30s left)" })
+    R("leveling: no food reminder while resting", { class = "WARRIOR", level = 30, resting = true, buffs = {} },
+        {}, { "Missing food buff (Well Fed)" })
+    R("leveling: no food reminder in combat", { class = "WARRIOR", level = 30, inCombat = true, buffs = {} },
+        {}, { "Missing food buff (Well Fed)" })
+    R("max level: no food reminder", { class = "WARRIOR", level = 60, buffs = {} }, {}, { "Missing food buff (Well Fed)" })
+    R("experience turned off: no food reminder", { class = "WARRIOR", level = 30, xpDisabled = true, buffs = {} },
+        {}, { "Missing food buff (Well Fed)" })
+
     -- Everyone
     R("mana user: low water (incl. reagent bag) + repair", { class = "PRIEST", spells = {}, resting = true, level = 40,
         bags = { { bag = 0, slot = 1, itemID = 159, count = 5 }, { bag = 5, slot = 2, itemID = 159, count = 2 } }, equipped = { [1] = 2131 }, headDurability = 40 },
         { "Low on water (7 left)", "Repair your gear" })
+    R("water: not below the minimum level", { class = "PRIEST", spells = {}, resting = true, level = 5 }, {}, { "Low on water (0 left)" })
     R("druid: bear form still a mana user (water)", { class = "DRUID", spells = {}, resting = true, level = 40, form = 5,
         bags = { { bag = 0, slot = 1, itemID = 159, count = 5 } } }, { "Low on water (5 left)" })
     R("future (unlearned) spells are ignored", { class = "MAGE", spells = {}, futureSpells = { 1459 }, buffs = {} },
@@ -311,6 +327,12 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("one secret buff: could be the blessing", { class = "PALADIN", spells = pal, secretBuffs = { [19740] = true },
         buffs = { { spellId = 465 }, { spellId = 19740, expires = NOW + 200 } } }, {}, { "No Blessing Active!", "No Aura Active!" })
 end
+
+-- Forever's "Well Fed XP Boost" is recognised by its English name until its spell ID is known
+Run("enUS leveling: Well Fed XP Boost counts", { class = "WARRIOR", level = 30, time = NOW,
+    buffs = { { spellId = 900003, expires = NOW + 600 } } }, {}, { "Missing food buff (Well Fed)" })
+Run("deDE leveling: Well Fed XP Boost not recognised yet", { class = "WARRIOR", level = 30, time = NOW, locale = "deDE",
+    buffs = { { spellId = 900003, expires = NOW + 600 } } }, { "Missing food buff (Well Fed)" })
 
 -- Water Shield (new in Forever) is recognised by its English name until its spell ID is known
 Run("enUS shaman: Water Shield recognised by name", { class = "SHAMAN", spells = { 324, 900001 }, time = NOW,
@@ -352,8 +374,25 @@ do
     local out = table.concat(env.__printed, "\n")
     Check("debug: buff visibility per family", out:find("Blessings in combat: always visible", 1, true) ~= nil
         and out:find("Auras in combat: hidden in combat", 1, true) ~= nil, out)
+    Check("debug: buffs on you", DebugValue(env, "Buffs on you") == "none", DebugValue(env, "Buffs on you"))
     -- every spell ID Prepped lists exists in the (Forever) spell data
     Check("debug: no unknown spell IDs", DebugValue(env, "Unknown spell IDs") == "none", DebugValue(env, "Unknown spell IDs"))
+end
+
+-- The buffs on you are listed with their IDs (to find Forever-only IDs), unless they're hidden
+do
+    local env = Mock.BuildEnv({ class = "SHAMAN", spells = { 324 }, time = NOW,
+        buffs = { { spellId = 900001, expires = NOW + 500 }, { spellId = 900003, expires = NOW + 600 } } })
+    LoadAddon(env)
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    Check("debug: buffs on you with IDs", DebugValue(env, "Buffs on you") == "Water Shield 900001, Well Fed XP Boost 900003",
+        DebugValue(env, "Buffs on you"))
+    local hidden = Mock.BuildEnv({ class = "SHAMAN", spells = { 324 }, time = NOW, inCombat = true, aurasSecret = true,
+        buffs = { { spellId = 900001, expires = NOW + 500 } } })
+    LoadAddon(hidden)
+    pcall(hidden.SlashCmdList.PREPPED, "debug")
+    Check("debug: buffs hidden in combat", DebugValue(hidden, "Buffs on you") == "hidden right now", DebugValue(hidden, "Buffs on you"))
+    Check("debug: no aura scan while hidden", hidden.__auraScans == 0, hidden.__auraScans)
 end
 
 -- Spells recognised only by name show their IDs, so they can be added to Prepped
