@@ -327,6 +327,14 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("leveling: no camp reminder while resting", { class = "WARRIOR", level = 30, resting = true, buffs = {} }, {}, { "Missing Camp Benefits" })
     R("leveling: no camp reminder in combat", { class = "WARRIOR", level = 30, inCombat = true, buffs = {} }, {}, { "Missing Camp Benefits" })
     R("leveling: no camp reminder while mounted", { class = "WARRIOR", level = 30, mounted = true, buffs = {} }, {}, { "Missing Camp Benefits" })
+
+    -- Everyone: unspent or unconfirmed talent points, out of combat
+    R("talents: unspent points", { class = "WARRIOR", unspentTalents = 3 }, { "3 unspent talent points" })
+    R("talents: one unspent point", { class = "WARRIOR", unspentTalents = 1 }, { "1 unspent talent point" })
+    R("talents: changes not applied", { class = "WARRIOR", stagedTalents = true }, { "Talent changes not applied" }, { "0 unspent talent points" })
+    R("talents: all spent", { class = "WARRIOR", talents = { 31, 20, 0 } }, {}, { "Talent changes not applied", "0 unspent talent points" })
+    R("talents: nothing in combat", { class = "WARRIOR", inCombat = true, unspentTalents = 3, stagedTalents = true }, {},
+        { "3 unspent talent points", "Talent changes not applied" })
     R("max level: no camp reminder", { class = "WARRIOR", level = 60, buffs = {} }, {}, { "Missing Camp Benefits" })
 
     -- Everyone

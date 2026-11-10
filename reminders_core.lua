@@ -44,6 +44,7 @@ Prepped.AllRules = {
     { id = "general_bag_space", label = "Low Bag Space", group = "General", defaultThreshold = 4, unit = "count", range = { 0, 30, 1 }, description = "Show a warning while resting when you have fewer free bag slots than this, so you can sell or bank before heading out. Quivers, ammo pouches, soul bags and the reagent bag don't count." },
     { id = "general_food", label = "Missing Food Buff", group = "General", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "While leveling, reminds you to keep a food buff (Well Fed) up when you're not resting, not in combat and not mounted. In Forever, cooked food also gives +5% experience from kills." },
     { id = "general_camp", label = "Missing Camp Benefits", group = "General", hasLowWarningToggle = true, defaultThreshold = 300, range = { 0, 600, 10 }, description = "While leveling, reminds you to get Camp Benefits (sit at a camp for a minute) when you're not resting, not in combat and not mounted. Camp Benefits combines the buffs of the camp's objects and lasts an hour." },
+    { id = "general_talents", label = "Unspent Talent Points", group = "General", description = "Reminds you out of combat when you have talent points to spend, or talent changes you haven't confirmed (Apply) yet." },
     { id = "general_group_check", label = "Check Supplies When Joining a Group", group = "General", description = "When you join a party or raid, show your supply reminders (reagents, ammo, repairs and so on) for a minute, even outside cities and inns. Only you see them, and not during combat." },
     { id = "general_group_announce", label = "Tell My Group", group = "General", defaultThreshold = 50, unit = "percent", sliderLabel = "Repairs below", range = { 0, 100, 5 }, description = "When you join a party or raid, post one line in group chat with what you're low on, for example \"[Prepped] you're at 47% durability, remember to repair soon.\" Once per group, never during combat. Durability is only mentioned below this percentage." },
     { id = "general_ready_check", label = "Check Supplies on Ready Check", group = "General", description = "During a ready check, show your supply reminders (reagents, ammo, repairs and so on) even outside cities and inns, so you know what you're short on before the pull. Not during combat." },
@@ -1053,6 +1054,9 @@ local handlers = {
     CHARACTER_POINTS_CHANGED = InvalidateSpellsAndTalents,
     ACTIVE_TALENT_GROUP_CHANGED = InvalidateSpellsAndTalents,
     TRAIT_CONFIG_UPDATED = InvalidateSpellsAndTalents, -- also Legacy perks
+    TRAIT_NODE_CHANGED = false,                 -- talent changes staged, not yet applied
+    TRAIT_TREE_CURRENCY_INFO_UPDATED = false,
+    CONFIG_COMMIT_FAILED = false,
 
     -- Buffs, and what Blizzard hides from addons (combat, encounters, zones)
     UNIT_AURA = API.InvalidateAuras,

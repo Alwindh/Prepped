@@ -39,6 +39,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Check Supplies on Ready Check**: The same during a ready check, until it's over.
 - **Tell My Group**: When you join a party or raid, Prepped posts one line in group chat about what you're low on, for example `[Prepped] you're at 47% durability, remember to repair soon.` It names up to three things, posts once per group, waits until you're out of combat, and only mentions durability below 50% (adjustable). Turn it off on the Prepped options page if you'd rather not.
 - **Missing Camp Benefits**: Same conditions as the food buff: while leveling, reminds you to get **Camp Benefits** (sit at a camp for a minute; it combines the buffs of the camp's objects and lasts an hour). Optional early warning, by default 5 minutes before it runs out.
+- **Unspent Talent Points**: Out of combat, reminds you when you have talent points left to spend, or talent changes you haven't confirmed with **Apply** yet.
 - **Sound for New Reminders** (off by default): a short sound when a reminder appears. The same reminder stays silent for a while afterwards (default: 5 minutes), and there's never a sound in combat.
 
 ### Druid
