@@ -333,6 +333,8 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("mana user: low water (incl. reagent bag) + repair", { class = "PRIEST", spells = {}, resting = true, level = 40,
         bags = { { bag = 0, slot = 1, itemID = 159, count = 5 }, { bag = 5, slot = 2, itemID = 159, count = 2 } }, equipped = { [1] = 2131 }, headDurability = 40 },
         { "Low on water (7 left)", "Repair your gear" })
+    R("repair: slightly worn gear (80%) is above the default 70%", { class = "WARRIOR", resting = true, level = 40,
+        equipped = { [1] = 2131 }, headDurability = 80 }, {}, { "Repair your gear" })
     R("water: not below the minimum level", { class = "PRIEST", spells = {}, resting = true, level = 5 }, {}, { "Low on water (0 left)" })
     R("druid: bear form still a mana user (water)", { class = "DRUID", spells = {}, resting = true, level = 40, form = 5,
         bags = { { bag = 0, slot = 1, itemID = 159, count = 5 } } }, { "Low on water (5 left)" })
@@ -446,16 +448,16 @@ do
 end
 
 do
-    local S = Hunter({ headDurability = 80, ammoCount = 3000 })
+    local S = Hunter({ headDurability = 60, ammoCount = 3000 })
     local env = Setup(S)
     JoinGroup(env, S)
     env.__tick(3)
-    Check("group: nothing worth saying, no message (80% is above the 50% repair limit)", #env.__chat == 0, Messages(env))
-    local S2 = Hunter({ headDurability = 80, ammoCount = 3000 })
+    Check("group: nothing worth saying, no message (60% is above the 50% repair limit)", #env.__chat == 0, Messages(env))
+    local S2 = Hunter({ headDurability = 60, ammoCount = 3000 })
     local env2 = Setup(S2, function(P) P:SetRuleThreshold("general_group_announce", 90) end)
     JoinGroup(env2, S2)
     env2.__tick(3)
-    Check("group: repair limit is a setting", Messages(env2) == "PARTY: [Prepped] you're at 80% durability, remember to repair soon.", Messages(env2))
+    Check("group: repair limit is a setting", Messages(env2) == "PARTY: [Prepped] you're at 60% durability, remember to repair soon.", Messages(env2))
 end
 
 for _, rule in ipairs({ "general_group_announce", "general_master" }) do
