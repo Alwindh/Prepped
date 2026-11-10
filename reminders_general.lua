@@ -34,6 +34,7 @@ local generalReminders = {
         outOfCombat = true,
         noTravel = true,
     },
+    { id = "general_talents", outOfCombat = true },
 }
 
 -- Water = any item whose use effect is the "Drink" spell (any client language).
@@ -86,6 +87,16 @@ end
 
 checks.general_food = LevelingBuff(IsFoodBuff)
 checks.general_camp = LevelingBuff(IsCampBuff)
+
+function checks.general_talents()
+    local unspent, staged = API.GetTalentPointStatus()
+    if not unspent then return nil end
+    if staged then return "Talent changes not applied" end
+    if unspent > 0 then
+        return unspent == 1 and "1 unspent talent point" or string.format("%d unspent talent points", unspent)
+    end
+    return nil
+end
 
 function GeneralReminders.CheckReminders()
     Prepped:RunReminders(generalReminders, checks)

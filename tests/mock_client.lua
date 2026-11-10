@@ -13,6 +13,7 @@
 --   equipped                 { [inventorySlot] = itemID }
 --   enchants                 { [Enum.WeaponSlot] = { { type = Mock.IMBUE, ms = n, id = n }, ... } }
 --   skills, talents          { [skillLineID] = rank }, { points in tree 1, 2, 3 }
+--   unspentTalents, stagedTalents   talent points left to spend; unapplied talent changes
 --   pet                      { dead, happiness, foodTypes, canEat = { [itemID] = true } }
 --   form                     shapeshift form ID (1 cat, 3 travel, 4 aquatic, 5 bear, ...)
 --   resting, inCombat, mounted, dead, inGroup, inRaid, instanceGroup, xpDisabled
@@ -519,6 +520,11 @@ function Mock.BuildEnv(S)
             for _, gid in ipairs(ids) do out[#out + 1] = { traitNodeGroupID = gid, currencyInfos = { { spent = spent[gid] } } } end
             return out
         end,
+        GetTreeCurrencyInfo = function(cfg, tree, excludeStaged)
+            assert(cfg == 7 and tree == 900)
+            return { { traitCurrencyID = 1, quantity = S.unspentTalents or 0, spent = t[1] + t[2] + t[3] } }
+        end,
+        ConfigHasStagedChanges = function(cfg) return S.stagedTalents == true end,
         GetConfigIDByTreeID = function(treeID) if treeID >= 1187 and treeID <= 1189 then return 500 + treeID end end,
         GetTreeNodes = function(treeID) if treeID == 1188 then return { 1, 2 } end return {} end,
         GetNodeInfo = function(configID, nodeID)

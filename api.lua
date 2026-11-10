@@ -807,6 +807,33 @@ function API.GetPrimaryTalentTree()
     return best
 end
 
+-- Unspent talent points, and whether the talent frame has changes that
+-- weren't confirmed (Apply) yet. Returns unspent, staged; nil if unknown.
+-- Staged points count as spent here, so "staged" is what still needs Apply.
+local function ReadTalentPointStatus()
+    local configID = C_ClassTalents.GetActiveConfigID()
+    if not configID then return nil end
+    local configInfo = C_Traits.GetConfigInfo(configID)
+    local treeID = configInfo and configInfo.treeIDs and configInfo.treeIDs[1]
+    if not treeID then return nil end
+
+    local unspent
+    local currencies = C_Traits.GetTreeCurrencyInfo(configID, treeID, false)
+    local currency = currencies and currencies[1]
+    if currency and currency.quantity then unspent = currency.quantity end
+    if unspent == nil and UnitCharacterPoints then unspent = UnitCharacterPoints("player") end
+
+    local staged = C_Traits.ConfigHasStagedChanges and C_Traits.ConfigHasStagedChanges(configID) == true
+    return unspent or 0, staged
+end
+
+-- Not cached: cheap, and staged changes come without TRAIT_CONFIG_UPDATED.
+function API.GetTalentPointStatus()
+    local ok, unspent, staged = pcall(ReadTalentPointStatus)
+    if not ok or unspent == nil or IsSecret(unspent) then return nil end
+    return unspent, staged
+end
+
 ------------------------------------------------------------------------
 -- Cache invalidation and events
 ------------------------------------------------------------------------
