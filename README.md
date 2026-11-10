@@ -31,7 +31,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 ## Available Reminders
 
 ### Universal (All Classes)
-- **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (only shown while **resting** in cities/inns).
+- **Repair Reminder**: Triggers when your average gear durability drops below your chosen percentage (default 70%; only shown while **resting** in cities/inns).
 - **Low Bag Space**: While **resting**, warns when you have fewer free bag slots than your setting (default: 4), so you can sell or bank before heading out. Quivers, ammo pouches, soul bags and the reagent bag don't count.
 - **Water Reminder**: Reminds mana users (also druids in Bear or Cat Form) to buy water if they drop below a threshold. You can also set a **minimum level** for this reminder to avoid being bothered at low levels.
 - **Missing Food Buff**: While leveling, reminds you to keep a food buff (**Well Fed**) up when you're not resting, not in combat and not mounted (or in Travel Form / Ghost Wolf). In Forever, cooked food also gives +5% experience from kills. Off at max level or with experience turned off; optional early warning before it runs out.

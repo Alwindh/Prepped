@@ -40,7 +40,7 @@ Prepped.AllRules = {
     { id = "general_sound", label = "Sound for New Reminders", group = "General", defaultEnabled = false, defaultThreshold = 5, unit = "minutes", sliderLabel = "Repeat after", range = { 1, 60, 1 }, description = "Play a short sound when a reminder appears. The same reminder stays silent for this many minutes after it sounded, and there's no sound in combat." },
     { id = "general_water", label = "Buy Water", group = "General", defaultThreshold = 40, unit = "count", range = { 0, 200, 5 }, description = "Show a warning while resting when your water count drops below this, if you are a mana user.", announce = { "low on water ({count} left)", "buy more water" } },
     { id = "general_water_minlevel", label = "Water Reminder From Level", group = "General", sliderOnly = true, defaultThreshold = 10, unit = "level", range = { 1, 60, 1 }, description = "Minimum level for the Buy Water reminder." },
-    { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 100, unit = "percent", range = { 0, 100, 5 }, description = "Show a warning while resting when your gear durability drops below this percentage.", announce = { "at {count}% durability", "repair soon" } },
+    { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 70, unit = "percent", range = { 0, 100, 5 }, description = "Show a warning while resting when your gear durability drops below this percentage.", announce = { "at {count}% durability", "repair soon" } },
     { id = "general_bag_space", label = "Low Bag Space", group = "General", defaultThreshold = 4, unit = "count", range = { 0, 30, 1 }, description = "Show a warning while resting when you have fewer free bag slots than this, so you can sell or bank before heading out. Quivers, ammo pouches, soul bags and the reagent bag don't count." },
     { id = "general_food", label = "Missing Food Buff", group = "General", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "While leveling, reminds you to keep a food buff (Well Fed) up when you're not resting, not in combat and not mounted. In Forever, cooked food also gives +5% experience from kills." },
     { id = "general_camp", label = "Missing Camp Benefits", group = "General", hasLowWarningToggle = true, defaultThreshold = 300, range = { 0, 600, 10 }, description = "While leveling, reminds you to get Camp Benefits (sit at a camp for a minute) when you're not resting, not in combat and not mounted. Camp Benefits combines the buffs of the camp's objects and lasts an hour." },
@@ -188,6 +188,10 @@ local function ForEachProfile(settings, fn)
     end
 end
 
+-- Defaults that have changed since schema 1 wrote every default out; a saved
+-- value equal to the old default was never the player's choice.
+local PRE_SCHEMA2_DEFAULTS = { general_repair = 100 }
+
 -- MIGRATIONS[n] upgrades settings from schema n - 1 to n. Settings from a newer
 -- Prepped (a downgrade) are left alone.
 local MIGRATIONS = {
@@ -216,7 +220,7 @@ local MIGRATIONS = {
                     profile.thresholds[ruleId] = nil
                 else
                     value = ClampToRange(rule, value)
-                    if value == rule.defaultThreshold then value = nil end
+                    if value == rule.defaultThreshold or value == PRE_SCHEMA2_DEFAULTS[ruleId] then value = nil end
                     profile.thresholds[ruleId] = value
                 end
             end
