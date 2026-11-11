@@ -336,7 +336,12 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("food: not at level 9", { class = "WARRIOR", level = 9, buffs = {}, bags = MEAT }, {}, { "Missing food buff (Well Fed)" })
     R("food: from level 10", { class = "WARRIOR", level = 10, buffs = {}, bags = MEAT }, { "Missing food buff (Well Fed)" })
 
-    -- Everyone: Camp Benefits while leveling (same conditions as the food buff)
+    -- Everyone: Camp Benefits while leveling, also from level 10
+    R("camp: not at level 1", { class = "WARRIOR", level = 1, buffs = {} }, {}, { "Missing Camp Benefits" })
+    R("camp: not at level 9", { class = "WARRIOR", level = 9, buffs = {} }, {}, { "Missing Camp Benefits" })
+    R("camp: not at level 9 when about to expire", { class = "WARRIOR", level = 9, buffs = { { spellId = 1229741, expires = NOW + 200 } } },
+        {}, { "Camp Benefits expiring (200s left)" })
+    R("camp: from level 10", { class = "WARRIOR", level = 10, buffs = {} }, { "Missing Camp Benefits" })
     R("leveling: no Camp Benefits", { class = "WARRIOR", level = 30, buffs = { { spellId = 1248406, expires = NOW + 900 } } },
         { "Missing Camp Benefits" }, { "Missing food buff (Well Fed)" })
     R("leveling: Camp Benefits up", { class = "WARRIOR", level = 30, buffs = { { spellId = 1229741, expires = NOW + 3000 } }, bags = MEAT },
@@ -1162,15 +1167,16 @@ do
 end
 
 do
-    -- The reminder starts when a character with buff food reaches level 10
+    -- The leveling reminders start when a character (here with buff food) reaches level 10
     local S = { class = "WARRIOR", level = 9, buffs = {}, bags = MEAT }
     local env = Setup(S)
     env.__tick(1)
-    Check("food: nothing at level 9", not Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    Check("leveling: no reminders at all at level 9", #VisibleReminders(env) == 0, Shown(env))
     S.level = 10
     env.__fire("PLAYER_LEVEL_UP", 10)
     env.__tick(0.3)
     Check("food: shown on reaching level 10", Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    Check("camp: shown on reaching level 10", Has(VisibleReminders(env), "Missing Camp Benefits"), Shown(env))
 end
 
 do

@@ -5,7 +5,6 @@ local API = ns.API
 local GeneralReminders = {}
 
 local IsFoodBuff = API.Matcher(API.WELL_FED)
-local FOOD_BUFF_MIN_LEVEL = 10 -- new characters are left alone
 -- Sitting at a camp for a minute combines the buffs of its objects into "Camp Benefits" (1 hour).
 local CAMP_BENEFITS = API.SpellFamily("Camp Benefits", { 1229741 }, { aura = true })
 local IsCampBuff = API.Matcher(CAMP_BENEFITS)
@@ -71,16 +70,17 @@ function checks.general_water(config)
     return nil
 end
 
--- Buffs worth keeping up while leveling.
+-- Buffs worth keeping up while leveling; new characters are left alone.
+local LEVELING_BUFF_MIN_LEVEL = 10
+
 local function CheckLevelingBuff(config, matcher)
-    if not API.IsLeveling() then return nil end
+    if not API.IsLeveling() or UnitLevel("player") < LEVELING_BUFF_MIN_LEVEL then return nil end
     return Prepped:CheckTimedBuff(config.id, matcher, config.message, config.messageLow)
 end
 
--- From level 10, and only while you carry food that gives the buff: without it
--- there's nothing you can do about the reminder.
+-- Only while you carry food that gives the buff: without it there's nothing you
+-- can do about the reminder.
 function checks.general_food(config)
-    if UnitLevel("player") < FOOD_BUFF_MIN_LEVEL then return nil end
     local text = CheckLevelingBuff(config, IsFoodBuff)
     if text and not API.HasBuffFood() then return nil end
     return text
