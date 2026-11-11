@@ -565,6 +565,154 @@ function API.IsDrinkItem(itemID)
 end
 
 ------------------------------------------------------------------------
+-- Food that gives a food buff
+------------------------------------------------------------------------
+-- Every food buff is called "Well Fed" (they differ in their extra effect), and in
+-- Forever cooked food's Well Fed also gives +5% experience from kills. Matching the
+-- name these IDs have covers every food in any client language.
+local WELL_FED = API.SpellFamily("Well Fed", {
+    1248406,                                         -- Well Fed (Forever cooked food)
+    19705, 19706, 19708, 19709, 19710, 19711, 24799, -- Well Fed (older foods)
+}, { aura = true })
+API.WELL_FED = WELL_FED
+
+-- Which food gives that buff is only written in its tooltip ("... you will become
+-- well fed and gain ..."). A Food & Drink item therefore counts as buff food when
+-- its tooltip names the buff, in the client's own words for it. That is only
+-- relied on where it is seen to work: the tooltip of a food known to give the
+-- buff has to name it too. On a client where it doesn't (another wording, no
+-- tooltip data), any food counts instead.
+local ITEM_CLASS_CONSUMABLE = (Enum.ItemClass and Enum.ItemClass.Consumable) or 0
+local CONSUMABLE_FOOD_AND_DRINK = 5      -- item subclass
+local BUFF_FOOD_SAMPLES = { 2680, 6888 } -- Spiced Wolf Meat, Herb Baked Egg
+local SAMPLE_WAIT_SECONDS = 10           -- how long the samples' item data may take to load
+local BUFF_FOOD_SCAN_TTL = 60            -- safety net; bag changes invalidate the scan
+
+local function IsFoodOrDrink(itemID)
+    local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
+    return classID == ITEM_CLASS_CONSUMABLE and subClassID == CONSUMABLE_FOOD_AND_DRINK
+end
+
+local function ReadTooltipLines(itemID)
+    local data = C_TooltipInfo.GetItemByID(itemID)
+    local lines = type(data) == "table" and data.lines
+    if type(lines) ~= "table" then return nil end
+    local parts = {}
+    for _, line in ipairs(lines) do
+        local text = line.leftText
+        if not IsSecret(text) and type(text) == "string" then parts[#parts + 1] = text end
+    end
+    if #parts == 0 then return nil end
+    return table.concat(parts, "\n"):lower()
+end
+
+-- The item's tooltip in lower case, or nil while it can't be read. The second
+-- result is true when that is because the item's data is still loading.
+local function ReadItemTooltip(itemID)
+    if C_Item.GetItemInfo(itemID) == nil then -- also requests it
+        itemDataPending = true
+        return nil, true
+    end
+    if not (C_TooltipInfo and C_TooltipInfo.GetItemByID) then return nil, false end
+    local ok, text = pcall(ReadTooltipLines, itemID)
+    return ok and text or nil, false
+end
+
+local function NamesFoodBuff(tooltip)
+    for name in pairs(GetFamilyNames(WELL_FED)) do
+        if tooltip:find(name:lower(), 1, true) then return true end
+    end
+    return false
+end
+
+local tooltipsNameFoodBuff, sampleWaitStart = false, nil
+
+-- Do food tooltips name the buff on this client? true (remembered), false, or
+-- nil while the samples' item data is still loading (early after login).
+local function TooltipsNameFoodBuff()
+    if tooltipsNameFoodBuff then return true end
+    local loading = false
+    for _, itemID in ipairs(BUFF_FOOD_SAMPLES) do
+        if C_Item.GetItemInfoInstant(itemID) ~= nil then -- the client knows the item
+            local tooltip, stillLoading = ReadItemTooltip(itemID)
+            if tooltip and NamesFoodBuff(tooltip) then
+                tooltipsNameFoodBuff = true
+                return true
+            end
+            loading = loading or stillLoading
+        end
+    end
+    if loading then
+        local now = GetTime()
+        sampleWaitStart = sampleWaitStart or now
+        if now - sampleWaitStart < SAMPLE_WAIT_SECONDS then return nil end
+    end
+    return false
+end
+
+local buffFoodItems = {} -- [itemID] = true: its tooltip names the food buff
+local plainFoodScan = {} -- [itemID] = the scan that last read its tooltip without finding the buff
+local foodScan = 0
+
+-- byTooltip: what TooltipsNameFoodBuff() said (true or false).
+local function IsBuffFood(itemID, byTooltip)
+    if buffFoodItems[itemID] then return true end
+    if not IsFoodOrDrink(itemID) then return false end
+    if not byTooltip then return not API.IsDrinkItem(itemID) end -- can't tell: any food counts
+    if plainFoodScan[itemID] == foodScan then return false end   -- another stack of it
+    local tooltip = ReadItemTooltip(itemID)
+    if tooltip and NamesFoodBuff(tooltip) then
+        buffFoodItems[itemID] = true
+        return true
+    end
+    -- Not remembered for good: a tooltip read early can still be incomplete.
+    plainFoodScan[itemID] = foodScan
+    return false
+end
+
+local buffFoodFound, buffFoodGeneration, buffFoodScanTime = false, nil, 0
+local scanByTooltip
+
+local function NoteBuffFood(itemID)
+    if not buffFoodFound and IsBuffFood(itemID, scanByTooltip) then buffFoodFound = true end
+end
+
+-- True when your bags hold food that gives a food buff. Scanned once per change
+-- of the bags (and once a minute, as a safety net).
+function API.HasBuffFood()
+    local now = GetTime()
+    if buffFoodGeneration == bagGeneration and (now - buffFoodScanTime) < BUFF_FOOD_SCAN_TTL then
+        return buffFoodFound
+    end
+    buffFoodFound, buffFoodGeneration, buffFoodScanTime = false, bagGeneration, now
+    scanByTooltip = TooltipsNameFoodBuff()
+    if scanByTooltip == nil then
+        -- Can't tell yet (early login): look again soon instead of caching "no food".
+        buffFoodScanTime = now - BUFF_FOOD_SCAN_TTL + 1
+    else
+        foodScan = foodScan + 1
+        API.ForEachBagItem(NoteBuffFood)
+    end
+    return buffFoodFound
+end
+
+-- For /prepped debug: "Name id" per food and drink in your bags, with "(food buff)"
+-- behind what counts as buff food, and whether food tooltips name the buff here.
+function API.DescribeBagFood()
+    local byTooltip = TooltipsNameFoodBuff()
+    local list, seen = {}, {}
+    foodScan = foodScan + 1
+    API.ForEachBagItem(function(itemID)
+        if seen[itemID] or not IsFoodOrDrink(itemID) then return end
+        seen[itemID] = true
+        local isBuffFood = byTooltip ~= nil and IsBuffFood(itemID, byTooltip)
+        list[#list + 1] = string.format("%s %d%s", C_Item.GetItemInfo(itemID) or "?", itemID, isBuffFood and " (food buff)" or "")
+    end)
+    table.sort(list)
+    return list, (byTooltip and "yes") or (byTooltip == false and "no (any food counts)") or "item data still loading"
+end
+
+------------------------------------------------------------------------
 -- Hunter pets (C_PetInfo, with the classic globals as a fallback)
 ------------------------------------------------------------------------
 local function PetInfoFunction(name)

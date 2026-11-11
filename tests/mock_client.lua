@@ -25,6 +25,8 @@
 --   reagentFreeSpells        { [spellID] = true }: castable without its reagent (a perk Prepped doesn't know)
 --   freeBagSlots             free slots in the backpack (default: 16 minus the items in bag 0)
 --   uncachedItems            { [itemID] = true }: item data not loaded yet (GetItemInfo/GetItemSpell return nil)
+--   tooltipsDontNameBuff     food tooltips word the food buff differently from the buff's name
+--   noTooltipAPI             the client has no C_TooltipInfo
 --   missingSpellIDs          { [spellID] = true } the client doesn't know
 --   breakSettings            the Settings API errors
 
@@ -139,14 +141,23 @@ reagent(5140, true, 1856, 1857)                                   -- Flash Powde
 reagent(5530, false, 2094)                                        -- Blinding Powder (not sold by vendors): Blind
 local ONLY_WHILE_DEAD = { [20608] = true }
 
+-- Food and drink are Consumables (class 0) of subclass 5. `use` is the tooltip's
+-- "Use:" line; food with `wellFed` also gives the food buff, which only that line
+-- tells ("... you will become well fed and gain <wellFed> ...").
+local EAT = "Use: Restores 61 health over 18 sec. Must remain seated while eating."
+local DRINK = "Use: Restores 151 mana over 18 sec. Must remain seated while drinking."
 local ITEMS = {
     [2504] = { name = "Worn Shortbow", classID = 2, subClassID = 2 },
     [2947] = { name = "Small Throwing Knife", classID = 2, subClassID = 16 },
     [1201] = { name = "Dull Heater Shield", classID = 4, subClassID = 6 },
     [2131] = { name = "Shortsword", classID = 2, subClassID = 7 },
-    [159] = { name = "Refreshing Spring Water", classID = 0, subClassID = 5, spell = 430 },
-    [117] = { name = "Tough Jerky", classID = 0, subClassID = 5 },
-    [4536] = { name = "Shiny Red Apple", classID = 0, subClassID = 5 },
+    [159] = { name = "Refreshing Spring Water", classID = 0, subClassID = 5, spell = 430, use = DRINK },
+    [117] = { name = "Tough Jerky", classID = 0, subClassID = 5, use = EAT },
+    [4536] = { name = "Shiny Red Apple", classID = 0, subClassID = 5, use = EAT },
+    [2680] = { name = "Spiced Wolf Meat", classID = 0, subClassID = 5, use = EAT, wellFed = "2 Stamina and Spirit" },
+    [6888] = { name = "Herb Baked Egg", classID = 0, subClassID = 5, use = EAT, wellFed = "2 Stamina and Spirit" },
+    -- Forever also has drinks that give the food buff; this one (name and ID) is made up
+    [900003] = { name = "Berry Smoothie", classID = 0, subClassID = 5, spell = 430, use = DRINK, wellFed = "5% experience from kills" },
 }
 
 ------------------------------------------------------------------------
@@ -397,7 +408,7 @@ function Mock.BuildEnv(S)
     env.SOUNDKIT = { MAP_PING = 3175 }
     env.PlaySound = function(soundKitID) env.__sounds[#env.__sounds + 1] = soundKitID; return true end
     env.Enum = {
-        ItemClass = { Weapon = 2, Armor = 4 },
+        ItemClass = { Consumable = 0, Weapon = 2, Armor = 4 },
         ItemWeaponSubclass = { Thrown = 16 },
         SpellBookSpellBank = { Player = 0, Pet = 1 },
         SpellBookItemType = { None = 0, Spell = 1, FutureSpell = 2 },
@@ -431,6 +442,30 @@ function Mock.BuildEnv(S)
             return list
         end,
     }
+    -- Item tooltips: the name, then the "Use:" line. Buff food names the buff there in
+    -- the client's language, in lower case ("... you will become well fed ...").
+    env.__tooltipReads = 0
+    env.C_TooltipInfo = {
+        GetItemByID = function(id)
+            env.__tooltipReads = env.__tooltipReads + 1
+            local it = ITEMS[id]
+            if not it then return nil end
+            if S.uncachedItems and S.uncachedItems[id] then
+                return { type = 0, id = id, lines = { { leftText = "Retrieving item information" } } }
+            end
+            local lines = { { leftText = Loc(it.name) } }
+            local use = Loc(it.use)
+            if use and it.wellFed then
+                local buff = S.tooltipsDontNameBuff and "refreshed" or string.lower(SpellName(19705))
+                use = use .. " If you spend at least 10 seconds " .. (it.use == DRINK and "drinking" or "eating") .. " you will become "
+                    .. buff .. " and gain " .. it.wellFed .. " for 15 min."
+            end
+            if use then lines[#lines + 1] = { leftText = use } end
+            return { type = 0, id = id, lines = lines }
+        end,
+    }
+    if S.noTooltipAPI then env.C_TooltipInfo = nil end
+
     -- Spellbook: learned spells are "Spell" items, futureSpells "FutureSpell" items
     local known = {}
     for _, id in ipairs(S.spells or {}) do known[id] = true end

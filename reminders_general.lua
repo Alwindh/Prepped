@@ -4,14 +4,8 @@ local API = ns.API
 
 local GeneralReminders = {}
 
--- Every food buff is called "Well Fed" (they differ in their extra effect), and in
--- Forever cooked food's Well Fed also gives +5% experience from kills. Matching the
--- name these IDs have covers every food in any client language.
-local WELL_FED = API.SpellFamily("Well Fed", {
-    1248406,                                         -- Well Fed (Forever cooked food)
-    19705, 19706, 19708, 19709, 19710, 19711, 24799, -- Well Fed (older foods)
-}, { aura = true })
-local IsFoodBuff = API.Matcher(WELL_FED)
+local IsFoodBuff = API.Matcher(API.WELL_FED)
+local FOOD_BUFF_MIN_LEVEL = 10 -- new characters are left alone
 -- Sitting at a camp for a minute combines the buffs of its objects into "Camp Benefits" (1 hour).
 local CAMP_BENEFITS = API.SpellFamily("Camp Benefits", { 1229741 }, { aura = true })
 local IsCampBuff = API.Matcher(CAMP_BENEFITS)
@@ -78,15 +72,23 @@ function checks.general_water(config)
 end
 
 -- Buffs worth keeping up while leveling.
-local function LevelingBuff(matcher)
-    return function(config)
-        if not API.IsLeveling() then return nil end
-        return Prepped:CheckTimedBuff(config.id, matcher, config.message, config.messageLow)
-    end
+local function CheckLevelingBuff(config, matcher)
+    if not API.IsLeveling() then return nil end
+    return Prepped:CheckTimedBuff(config.id, matcher, config.message, config.messageLow)
 end
 
-checks.general_food = LevelingBuff(IsFoodBuff)
-checks.general_camp = LevelingBuff(IsCampBuff)
+-- From level 10, and only while you carry food that gives the buff: without it
+-- there's nothing you can do about the reminder.
+function checks.general_food(config)
+    if UnitLevel("player") < FOOD_BUFF_MIN_LEVEL then return nil end
+    local text = CheckLevelingBuff(config, IsFoodBuff)
+    if text and not API.HasBuffFood() then return nil end
+    return text
+end
+
+function checks.general_camp(config)
+    return CheckLevelingBuff(config, IsCampBuff)
+end
 
 function checks.general_talents()
     local unspent, staged = API.GetTalentPointStatus()

@@ -42,7 +42,7 @@ Prepped.AllRules = {
     { id = "general_water_minlevel", label = "Water Reminder From Level", group = "General", sliderOnly = true, defaultThreshold = 10, unit = "level", range = { 1, 60, 1 }, description = "Minimum level for the Buy Water reminder." },
     { id = "general_repair", label = "Repair Reminder", group = "General", defaultThreshold = 70, unit = "percent", range = { 0, 100, 5 }, description = "Show a warning while resting when your gear durability drops below this percentage.", announce = { "at {count}% durability", "repair soon" } },
     { id = "general_bag_space", label = "Low Bag Space", group = "General", defaultThreshold = 4, unit = "count", range = { 0, 30, 1 }, description = "Show a warning while resting when you have fewer free bag slots than this, so you can sell or bank before heading out. Quivers, ammo pouches, soul bags and the reagent bag don't count." },
-    { id = "general_food", label = "Missing Food Buff", group = "General", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "While leveling, reminds you to keep a food buff (Well Fed) up when you're not resting, not in combat and not mounted. In Forever, cooked food also gives +5% experience from kills." },
+    { id = "general_food", label = "Missing Food Buff", group = "General", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "While leveling (from level 10), reminds you to keep a food buff (Well Fed) up when you carry food that gives one and you're not resting, not in combat and not mounted. In Forever, cooked food also gives +5% experience from kills." },
     { id = "general_camp", label = "Missing Camp Benefits", group = "General", hasLowWarningToggle = true, defaultThreshold = 300, range = { 0, 600, 10 }, description = "While leveling, reminds you to get Camp Benefits (sit at a camp for a minute) when you're not resting, not in combat and not mounted. Camp Benefits combines the buffs of the camp's objects and lasts an hour." },
     { id = "general_talents", label = "Unspent Talent Points", group = "General", description = "Reminds you out of combat when you have talent points to spend, or talent changes you haven't confirmed (Apply) yet." },
     { id = "general_group_check", label = "Check Supplies When Joining a Group", group = "General", description = "When you join a party or raid, show your supply reminders (reagents, ammo, repairs and so on) for a minute, even outside cities and inns. Only you see them, and not during combat." },
@@ -941,6 +941,9 @@ function Prepped:PrintDebugReport()
 
     local buffs = API.ListPlayerBuffs()
     DebugLine("Buffs on you: %s", buffs and ListOrNone(buffs) or "hidden right now")
+    local bagFood, tooltipsNameBuff = API.DescribeBagFood()
+    DebugLine("Food and drink in your bags: %s", ListOrNone(bagFood))
+    DebugLine("Food tooltips name the food buff: %s", tooltipsNameBuff)
 
     DebugLine("Unknown spell IDs: %s", ListOrNone(API.GetUnresolvedSpellIDs()))
     DebugLine("Recognised by name, ID not listed: %s", ListOrNone(API.GetUnlistedNameMatches(classToken)))

@@ -116,6 +116,8 @@ end
 -- Reminder scenarios, on an English and a German client
 ------------------------------------------------------------------------
 local NOW = 1000
+local MEAT = { { bag = 0, slot = 1, itemID = 2680, count = 5 } }  -- Spiced Wolf Meat: its tooltip says it makes you well fed
+local JERKY = { { bag = 0, slot = 1, itemID = 117, count = 5 } }  -- Tough Jerky: plain food
 for _, locale in ipairs({ "enUS", "deDE" }) do
     local function R(label, S, shown, hidden)
         S.locale = locale
@@ -293,34 +295,51 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("druid: Reagent Economy hides reagents", { class = "DRUID", spells = { 20484, 21849 }, resting = true, reagentEconomy = true },
         {}, { "Low on Maple Seeds (0 left)", "Low on Wild Berries (0 left)" })
 
-    -- Everyone: food buff while leveling
-    R("leveling: no food buff", { class = "WARRIOR", level = 30, buffs = {} }, { "Missing food buff (Well Fed)" })
-    R("leveling: Well Fed up", { class = "WARRIOR", level = 30, buffs = { { spellId = 19710, expires = NOW + 600 } } },
+    -- Everyone: food buff while leveling, with food in your bags that gives it
+    R("leveling: no food buff", { class = "WARRIOR", level = 30, buffs = {}, bags = MEAT }, { "Missing food buff (Well Fed)" })
+    R("leveling: Well Fed up", { class = "WARRIOR", level = 30, buffs = { { spellId = 19710, expires = NOW + 600 } }, bags = MEAT },
         {}, { "Missing food buff (Well Fed)", "Food buff expiring (600s left)" })
-    R("leveling: food buff expiring", { class = "MAGE", level = 30, buffs = { { spellId = 24799, expires = NOW + 30 } } },
+    R("leveling: food buff expiring", { class = "MAGE", level = 30, buffs = { { spellId = 24799, expires = NOW + 30 } }, bags = MEAT },
         { "Food buff expiring (30s left)" })
-    R("leveling: no food reminder while resting", { class = "WARRIOR", level = 30, resting = true, buffs = {} },
+    R("leveling: no food reminder while resting", { class = "WARRIOR", level = 30, resting = true, buffs = {}, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("leveling: no food reminder in combat", { class = "WARRIOR", level = 30, inCombat = true, buffs = {} },
+    R("leveling: no food reminder in combat", { class = "WARRIOR", level = 30, inCombat = true, buffs = {}, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("max level: no food reminder", { class = "WARRIOR", level = 60, buffs = {} }, {}, { "Missing food buff (Well Fed)" })
-    R("experience turned off: no food reminder", { class = "WARRIOR", level = 30, xpDisabled = true, buffs = {} },
+    R("max level: no food reminder", { class = "WARRIOR", level = 60, buffs = {}, bags = MEAT }, {}, { "Missing food buff (Well Fed)" })
+    R("experience turned off: no food reminder", { class = "WARRIOR", level = 30, xpDisabled = true, buffs = {}, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("leveling: Forever's Well Fed counts", { class = "WARRIOR", level = 30, buffs = { { spellId = 1248406, expires = NOW + 900 } } },
+    R("leveling: Forever's Well Fed counts", { class = "WARRIOR", level = 30, buffs = { { spellId = 1248406, expires = NOW + 900 } }, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("leveling: no food reminder while mounted", { class = "WARRIOR", level = 30, mounted = true, buffs = {} },
+    R("leveling: no food reminder while mounted", { class = "WARRIOR", level = 30, mounted = true, buffs = {}, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("leveling: no food reminder in Travel Form", { class = "DRUID", level = 30, form = 3, buffs = {} },
+    R("leveling: no food reminder in Travel Form", { class = "DRUID", level = 30, form = 3, buffs = {}, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("leveling: no food reminder in Ghost Wolf", { class = "SHAMAN", level = 30, form = 16, buffs = {} },
+    R("leveling: no food reminder in Ghost Wolf", { class = "SHAMAN", level = 30, form = 16, buffs = {}, bags = MEAT },
         {}, { "Missing food buff (Well Fed)" })
-    R("leveling: food reminder in Cat Form", { class = "DRUID", level = 30, form = 1, buffs = {} },
+    R("leveling: food reminder in Cat Form", { class = "DRUID", level = 30, form = 1, buffs = {}, bags = MEAT },
         { "Missing food buff (Well Fed)" })
+
+    -- Without such food there's nothing you can do about it, so no reminder
+    R("food: nothing to eat", { class = "WARRIOR", level = 30, buffs = {} }, {}, { "Missing food buff (Well Fed)" })
+    R("food: plain food gives no buff", { class = "WARRIOR", level = 30, buffs = {}, bags = JERKY }, {}, { "Missing food buff (Well Fed)" })
+    R("food: water gives no buff", { class = "WARRIOR", level = 30, buffs = {}, bags = { { bag = 0, slot = 1, itemID = 159, count = 20 } } },
+        {}, { "Missing food buff (Well Fed)" })
+    R("food: buff food among plain food and water", { class = "WARRIOR", level = 30, buffs = {}, bags = {
+        { bag = 0, slot = 1, itemID = 117, count = 5 }, { bag = 0, slot = 2, itemID = 159, count = 20 }, { bag = 0, slot = 7, itemID = 6888, count = 1 } } },
+        { "Missing food buff (Well Fed)" })
+    R("food: a drink that gives the buff counts", { class = "WARRIOR", level = 30, buffs = {}, bags = { { bag = 0, slot = 1, itemID = 900003, count = 3 } } },
+        { "Missing food buff (Well Fed)" })
+    R("food: buff running out with nothing left to eat", { class = "MAGE", level = 30, buffs = { { spellId = 24799, expires = NOW + 30 } }, bags = JERKY },
+        {}, { "Food buff expiring (30s left)", "Missing food buff (Well Fed)" })
+    -- New characters are left alone until level 10
+    R("food: not at level 1", { class = "WARRIOR", level = 1, buffs = {}, bags = MEAT }, {}, { "Missing food buff (Well Fed)" })
+    R("food: not at level 9", { class = "WARRIOR", level = 9, buffs = {}, bags = MEAT }, {}, { "Missing food buff (Well Fed)" })
+    R("food: from level 10", { class = "WARRIOR", level = 10, buffs = {}, bags = MEAT }, { "Missing food buff (Well Fed)" })
 
     -- Everyone: Camp Benefits while leveling (same conditions as the food buff)
     R("leveling: no Camp Benefits", { class = "WARRIOR", level = 30, buffs = { { spellId = 1248406, expires = NOW + 900 } } },
         { "Missing Camp Benefits" }, { "Missing food buff (Well Fed)" })
-    R("leveling: Camp Benefits up", { class = "WARRIOR", level = 30, buffs = { { spellId = 1229741, expires = NOW + 3000 } } },
+    R("leveling: Camp Benefits up", { class = "WARRIOR", level = 30, buffs = { { spellId = 1229741, expires = NOW + 3000 } }, bags = MEAT },
         { "Missing food buff (Well Fed)" }, { "Missing Camp Benefits", "Camp Benefits expiring (3000s left)" })
     R("leveling: Camp Benefits expiring (5 min warning)", { class = "WARRIOR", level = 30, buffs = { { spellId = 1229741, expires = NOW + 200 } } },
         { "Camp Benefits expiring (200s left)" })
@@ -727,7 +746,7 @@ end
 
 do
     -- A leveling priest in the open world: four buff reminders (Fortitude, Inner Fire, food, camp)
-    local S = { class = "PRIEST", level = 30, spells = { 1243, 588 }, time = NOW,
+    local S = { class = "PRIEST", level = 30, spells = { 1243, 588 }, time = NOW, bags = MEAT,
         buffs = { { spellId = 1243, expires = NOW + 1000 }, { spellId = 588, expires = NOW + 1000 } } }
     local env = Setup(S)
     env.__tick(1)
@@ -1043,6 +1062,142 @@ do
     SetBuff(false)
     Check("sound: never in combat", #env.__sounds == 2, #env.__sounds)
     Check("sound: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+end
+
+------------------------------------------------------------------------
+-- Food buff: which food in your bags gives it is read from the item tooltips
+------------------------------------------------------------------------
+local FOOD_REMINDER = "Missing food buff (Well Fed)"
+local function Shown(env) return table.concat(VisibleReminders(env), " | ") end
+
+-- Where tooltips can't tell (they word the buff differently, or the client has no
+-- tooltip data), any food counts; drinks don't
+for _, case in ipairs({ { "tooltipsDontNameBuff", "tooltips don't name the buff" }, { "noTooltipAPI", "no tooltip data" } }) do
+    local function FoodRun(label, bags, shown, hidden)
+        Run("food, " .. case[2] .. ": " .. label, { class = "WARRIOR", level = 30, buffs = {}, bags = bags, time = NOW, [case[1]] = true },
+            shown, hidden)
+    end
+    FoodRun("any food counts", JERKY, { FOOD_REMINDER })
+    FoodRun("buff food counts", MEAT, { FOOD_REMINDER })
+    FoodRun("water doesn't count", WATER, {}, { FOOD_REMINDER })
+    FoodRun("other items don't count", { { bag = 0, slot = 1, itemID = 2131, count = 1 } }, {}, { FOOD_REMINDER })
+    FoodRun("nothing to eat", {}, {}, { FOOD_REMINDER })
+end
+
+do
+    -- Just after login item data is still loading: no reminder until Prepped can tell
+    local S = { class = "WARRIOR", level = 30, buffs = {}, bags = MEAT, uncachedItems = { [2680] = true, [6888] = true } }
+    local env = Setup(S)
+    env.__tick(1)
+    Check("food: not while item data is loading", not Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    S.uncachedItems = nil
+    env.__fire("GET_ITEM_INFO_RECEIVED", 2680, true)
+    env.__tick(0.3)
+    Check("food: shown once item data has loaded", Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    Check("food: no Lua errors while loading", #env.__errors == 0, table.concat(env.__errors, " || "))
+
+    -- The same for food in your bags that the client hasn't loaded yet
+    local S2 = { class = "WARRIOR", level = 30, buffs = {}, bags = { { bag = 0, slot = 1, itemID = 6888, count = 2 } }, uncachedItems = { [6888] = true } }
+    local env2 = Setup(S2)
+    env2.__tick(1)
+    Check("food: not while the food's own data is loading", not Has(VisibleReminders(env2), FOOD_REMINDER), Shown(env2))
+    S2.uncachedItems = nil
+    env2.__fire("GET_ITEM_INFO_RECEIVED", 6888, true)
+    env2.__tick(0.3)
+    Check("food: shown once the food's own data has loaded", Has(VisibleReminders(env2), FOOD_REMINDER), Shown(env2))
+end
+
+do
+    -- Plain food doesn't show up in the meantime either
+    local S = { class = "WARRIOR", level = 30, buffs = {}, bags = JERKY, uncachedItems = { [2680] = true, [6888] = true } }
+    local env = Setup(S)
+    local flashed = false
+    for _ = 1, 50 do
+        env.__tick(0.1)
+        flashed = flashed or Has(VisibleReminders(env), FOOD_REMINDER)
+    end
+    Check("food: plain food doesn't flash while item data is loading", not flashed)
+    -- If that data never arrives Prepped stops waiting, and any food counts
+    env.__tick(8)
+    Check("food: stops waiting for item data after 10 seconds", Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    S.uncachedItems = nil
+    env.__fire("GET_ITEM_INFO_RECEIVED", 2680, true)
+    env.__tick(0.3)
+    Check("food: tooltips are used once the data does arrive", not Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+end
+
+do
+    -- Bags and tooltips are read once per change of the bags, not on every check
+    local TWO_STACKS = { { bag = 0, slot = 1, itemID = 117, count = 20 }, { bag = 0, slot = 2, itemID = 117, count = 5 },
+        { bag = 0, slot = 4, itemID = 2131, count = 1 } } -- and a sword, which isn't food
+    local S = { class = "WARRIOR", level = 30, buffs = {}, bags = TWO_STACKS }
+    local env = Setup(S)
+    env.__tick(1)
+    Check("food: plain food, no reminder", not Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    local slotReads, tooltipReads = env.__bagSlotReads, env.__tooltipReads
+    env.__tick(10)
+    Check("food: no rescans while the bags don't change", env.__bagSlotReads == slotReads and env.__tooltipReads == tooltipReads,
+        (env.__bagSlotReads - slotReads) .. " slot reads, " .. (env.__tooltipReads - tooltipReads) .. " tooltip reads")
+    env.__fire("BAG_UPDATE", 0)
+    env.__tick(0.3)
+    Check("food: one tooltip read for two stacks of the same food, none for other items", env.__tooltipReads - tooltipReads == 1,
+        env.__tooltipReads - tooltipReads)
+
+    S.bags = { TWO_STACKS[1], TWO_STACKS[2], TWO_STACKS[3], { bag = 0, slot = 3, itemID = 2680, count = 1 } }
+    env.__fire("BAG_UPDATE", 0)
+    env.__tick(0.3)
+    Check("food: shown after picking up buff food", Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    S.bags = TWO_STACKS
+    env.__fire("BAG_UPDATE", 0)
+    env.__tick(0.3)
+    Check("food: hidden again after eating the last of it", not Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+
+    -- Safety net: looked at again after a minute even without a bag event
+    slotReads = env.__bagSlotReads
+    env.__tick(59)
+    Check("food: still no rescan within a minute", env.__bagSlotReads == slotReads, env.__bagSlotReads - slotReads)
+    env.__tick(3)
+    Check("food: rescanned after a minute", env.__bagSlotReads > slotReads)
+    Check("food: no Lua errors", #env.__errors == 0, table.concat(env.__errors, " || "))
+end
+
+do
+    -- The reminder starts when a character with buff food reaches level 10
+    local S = { class = "WARRIOR", level = 9, buffs = {}, bags = MEAT }
+    local env = Setup(S)
+    env.__tick(1)
+    Check("food: nothing at level 9", not Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+    S.level = 10
+    env.__fire("PLAYER_LEVEL_UP", 10)
+    env.__tick(0.3)
+    Check("food: shown on reaching level 10", Has(VisibleReminders(env), FOOD_REMINDER), Shown(env))
+end
+
+do
+    -- /prepped debug lists the food and drink in your bags and what counts as buff food
+    local BAGS = { { bag = 0, slot = 1, itemID = 117, count = 5 }, { bag = 0, slot = 2, itemID = 159, count = 20 },
+        { bag = 0, slot = 3, itemID = 2680, count = 5 }, { bag = 0, slot = 4, itemID = 117, count = 20 }, { bag = 0, slot = 5, itemID = 2131, count = 1 } }
+    local env = Setup({ class = "WARRIOR", level = 30, buffs = {}, bags = BAGS })
+    pcall(env.SlashCmdList.PREPPED, "debug")
+    Check("debug: food and drink in your bags",
+        DebugValue(env, "Food and drink in your bags") == "Refreshing Spring Water 159, Spiced Wolf Meat 2680 (food buff), Tough Jerky 117",
+        DebugValue(env, "Food and drink in your bags"))
+    Check("debug: tooltips name the food buff", DebugValue(env, "Food tooltips name the food buff") == "yes",
+        DebugValue(env, "Food tooltips name the food buff"))
+
+    local vague = Setup({ class = "WARRIOR", level = 30, buffs = {}, bags = BAGS, tooltipsDontNameBuff = true })
+    pcall(vague.SlashCmdList.PREPPED, "debug")
+    Check("debug: any food counts where tooltips can't tell",
+        DebugValue(vague, "Food and drink in your bags") == "Refreshing Spring Water 159, Spiced Wolf Meat 2680 (food buff), Tough Jerky 117 (food buff)"
+        and DebugValue(vague, "Food tooltips name the food buff") == "no (any food counts)",
+        tostring(DebugValue(vague, "Food and drink in your bags")) .. " / " .. tostring(DebugValue(vague, "Food tooltips name the food buff")))
+
+    local loading = Setup({ class = "WARRIOR", level = 30, buffs = {}, bags = BAGS, uncachedItems = { [2680] = true, [6888] = true } })
+    pcall(loading.SlashCmdList.PREPPED, "debug")
+    Check("debug: food while item data is loading", DebugValue(loading, "Food tooltips name the food buff") == "item data still loading"
+        and DebugValue(loading, "Food and drink in your bags") == "? 2680, Refreshing Spring Water 159, Tough Jerky 117",
+        tostring(DebugValue(loading, "Food and drink in your bags")) .. " / " .. tostring(DebugValue(loading, "Food tooltips name the food buff")))
+    Check("debug: no Lua errors (food)", #env.__errors + #vague.__errors + #loading.__errors == 0)
 end
 
 print(string.format("%d passed, %d failed", passes, failures))
