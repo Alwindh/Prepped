@@ -181,6 +181,7 @@ local function BuildGeneralPage(category, layout)
     AddRule(category, layout, Prepped:GetRule("general_food"))
     AddRule(category, layout, Prepped:GetRule("general_camp"))
     AddRule(category, layout, Prepped:GetRule("general_talents"))
+    AddRule(category, layout, Prepped:GetRule("general_legacy"))
 
     layout:AddInitializer(CreateSettingsButtonInitializer("Reset All Settings", RESET,
         function() StaticPopup_Show("PREPPED_RESET_ALL_SETTINGS") end,

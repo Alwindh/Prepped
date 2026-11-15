@@ -14,6 +14,8 @@
 --   enchants                 { [Enum.WeaponSlot] = { { type = Mock.IMBUE, ms = n, id = n }, ... } }
 --   skills, talents          { [skillLineID] = rank }, { points in tree 1, 2, 3 }
 --   unspentTalents, stagedTalents   talent points left to spend; unapplied talent changes
+--   unspentLegacy            Legacy points left to spend: { professions, adventure, progression },
+--                            or a number for one currency shared by the three Legacy trees
 --   pet                      { dead, happiness, foodTypes, canEat = { [itemID] = true } }
 --   form                     shapeshift form ID (1 cat, 3 travel, 4 aquatic, 5 bear, ...)
 --   resting, inCombat, mounted, dead, inGroup, inRaid, instanceGroup, xpDisabled
@@ -556,6 +558,12 @@ function Mock.BuildEnv(S)
             return out
         end,
         GetTreeCurrencyInfo = function(cfg, tree, excludeStaged)
+            if tree >= 1187 and tree <= 1189 then
+                assert(cfg == 500 + tree)
+                local legacy = S.unspentLegacy
+                if type(legacy) == "number" then return { { traitCurrencyID = 50, quantity = legacy, spent = 0 } } end
+                return { { traitCurrencyID = tree, quantity = legacy and legacy[tree - 1186] or 0, spent = 0 } }
+            end
             assert(cfg == 7 and tree == 900)
             return { { traitCurrencyID = 1, quantity = S.unspentTalents or 0, spent = t[1] + t[2] + t[3] } }
         end,
