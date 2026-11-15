@@ -28,6 +28,7 @@ local generalReminders = {
         noTravel = true,
     },
     { id = "general_talents", outOfCombat = true },
+    { id = "general_legacy", outOfCombat = true },
 }
 
 -- Water = any item whose use effect is the "Drink" spell (any client language).
@@ -98,6 +99,12 @@ function checks.general_talents()
         return unspent == 1 and "1 unspent talent point" or string.format("%d unspent talent points", unspent)
     end
     return nil
+end
+
+function checks.general_legacy()
+    local unspent = API.GetUnspentLegacyPoints()
+    if not unspent or unspent <= 0 then return nil end
+    return unspent == 1 and "1 unspent Legacy point" or string.format("%d unspent Legacy points", unspent)
 end
 
 function GeneralReminders.CheckReminders()

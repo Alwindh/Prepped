@@ -359,6 +359,15 @@ for _, locale in ipairs({ "enUS", "deDE" }) do
     R("talents: all spent", { class = "WARRIOR", talents = { 31, 20, 0 } }, {}, { "Talent changes not applied", "0 unspent talent points" })
     R("talents: nothing in combat", { class = "WARRIOR", inCombat = true, unspentTalents = 3, stagedTalents = true }, {},
         { "3 unspent talent points", "Talent changes not applied" })
+    -- Everyone: unspent Legacy points, out of combat
+    R("legacy: unspent points in two trees", { class = "WARRIOR", unspentLegacy = { 2, 0, 3 } }, { "5 unspent Legacy points" })
+    R("legacy: one unspent point", { class = "WARRIOR", unspentLegacy = { 0, 1, 0 } }, { "1 unspent Legacy point" })
+    R("legacy: a currency shared by the trees counts once", { class = "WARRIOR", unspentLegacy = 4 }, { "4 unspent Legacy points" })
+    R("legacy: all spent", { class = "WARRIOR" }, {}, { "0 unspent Legacy points" })
+    R("legacy: nothing in combat", { class = "WARRIOR", inCombat = true, unspentLegacy = 4 }, {}, { "4 unspent Legacy points" })
+    R("legacy: at max level too", { class = "WARRIOR", level = 60, unspentLegacy = { 1, 1, 0 } }, { "2 unspent Legacy points" })
+    R("legacy: next to talent points", { class = "WARRIOR", unspentTalents = 2, unspentLegacy = 4 },
+        { "2 unspent talent points", "4 unspent Legacy points" })
     R("max level: no camp reminder", { class = "WARRIOR", level = 60, buffs = {} }, {}, { "Missing Camp Benefits" })
 
     -- Everyone
@@ -944,6 +953,9 @@ do
     pcall(env.SlashCmdList.PREPPED, "debug")
     Check("debug: Legacy perks listed", DebugValue(env, "Legacy perks") == "Some Other Perk 999999, Reagent Economy 1262650",
         DebugValue(env, "Legacy perks"))
+    Check("debug: unspent Legacy points", DebugValue(env, "Unspent Legacy points")
+        == "0 (tree 1187 currency 1187: 0, tree 1188 currency 1188: 0, tree 1189 currency 1189: 0)",
+        DebugValue(env, "Unspent Legacy points"))
 end
 
 ------------------------------------------------------------------------

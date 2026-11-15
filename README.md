@@ -40,6 +40,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Tell My Group**: When you join a party or raid, Prepped posts one line in group chat about what you're low on, for example `[Prepped] you're at 47% durability, remember to repair soon.` It names up to three things, posts once per group, waits until you're out of combat, and only mentions durability below 50% (adjustable). Turn it off on the Prepped options page if you'd rather not.
 - **Missing Camp Benefits**: While leveling (from level 10), reminds you to get **Camp Benefits** (sit at a camp for a minute; it combines the buffs of the camp's objects and lasts an hour) when you're not resting, not in combat and not mounted. Optional early warning, by default 5 minutes before it runs out.
 - **Unspent Talent Points**: Out of combat, reminds you when you have talent points left to spend, or talent changes you haven't confirmed with **Apply** yet.
+- **Unspent Legacy Points**: Out of combat, reminds you when you have Legacy points left to spend in the Legacy trees (Professions, Adventure, Progression).
 - **Sound for New Reminders** (off by default): a short sound when a reminder appears. The same reminder stays silent for a while afterwards (default: 5 minutes), and there's never a sound in combat.
 
 ### Druid
@@ -137,7 +138,7 @@ Settings are shared by all characters (**Account-wide**) unless you switch that 
 - **Food that gives a food buff**: which food makes you Well Fed is only written in its tooltip, so Prepped reads the tooltips of the food and drink in your bags and looks for the buff's name, in your client's language. Plain food and water don't count. If the tooltips on your client don't name the buff, any food in your bags counts instead. `/prepped debug` lists the food and drink it found and which of it counts.
 - **Any client language**: Spells are recognised by their spell ID, so Prepped works on non-English clients too (its own texts are English). The exception is Water Shield, until its Forever spell ID is known.
 - **Spec detection** (Protection Paladin, Enhancement Shaman) uses the points spent in each talent tree.
-- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, your Legacy perks (with spell IDs), spells seen working without their reagent, the buffs on you with their spell IDs, the food and drink in your bags (and which of it gives a food buff), which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, spells Prepped only recognises by name (their IDs can then be added), the line it would post when you join a group, snoozed reminders, and how many checks Prepped has run (with timings).
+- **`/prepped debug`** prints what Prepped sees: talent trees, weapon enchants, ranged weapon, Reagent Economy, your Legacy perks (with spell IDs), your unspent Legacy points per tree, spells seen working without their reagent, the buffs on you with their spell IDs, the food and drink in your bags (and which of it gives a food buff), which of your buffs Blizzard hides in combat, your druid form, any spell IDs your client doesn't know, spells Prepped only recognises by name (their IDs can then be added), the line it would post when you join a group, snoozed reminders, and how many checks Prepped has run (with timings).
 
 ---
 

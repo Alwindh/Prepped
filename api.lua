@@ -833,6 +833,46 @@ function API.GetLegacyPerks()
     return ok and list or nil
 end
 
+-- Unspent Legacy points per currency, over all Legacy trees: a list of
+-- { treeID = n, currencyID = n, quantity = n }. Trees that share a currency
+-- report it once.
+local function ReadLegacyCurrencies()
+    local list, seen = {}, {}
+    for _, treeID in ipairs(LEGACY_TREE_IDS) do
+        local configID = C_Traits.GetConfigIDByTreeID(treeID)
+        if configID then
+            for index, currency in ipairs(C_Traits.GetTreeCurrencyInfo(configID, treeID, false) or {}) do
+                local key = currency.traitCurrencyID or (treeID .. ":" .. index)
+                if not seen[key] then
+                    seen[key] = true
+                    list[#list + 1] = { treeID = treeID, currencyID = currency.traitCurrencyID, quantity = currency.quantity }
+                end
+            end
+        end
+    end
+    return list
+end
+
+-- The list above, or nil when the Legacy trees can't be read (for /prepped debug).
+function API.GetLegacyCurrencies()
+    local ok, list = pcall(ReadLegacyCurrencies)
+    return ok and list or nil
+end
+
+-- Legacy points left to spend, over all Legacy trees; nil if unknown.
+-- Not cached: cheap, like API.GetTalentPointStatus.
+function API.GetUnspentLegacyPoints()
+    local list = API.GetLegacyCurrencies()
+    if not list then return nil end
+    local unspent = 0
+    for _, currency in ipairs(list) do
+        local quantity = currency.quantity
+        if IsSecret(quantity) then return nil end
+        if type(quantity) == "number" and quantity > 0 then unspent = unspent + quantity end
+    end
+    return unspent
+end
+
 -- Spells seen working without their reagent (see API.ReagentNeeded).
 local reagentFreeSpells = {}
 

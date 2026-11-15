@@ -45,6 +45,7 @@ Prepped.AllRules = {
     { id = "general_food", label = "Missing Food Buff", group = "General", hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 }, description = "While leveling (from level 10), reminds you to keep a food buff (Well Fed) up when you carry food that gives one and you're not resting, not in combat and not mounted. In Forever, cooked food also gives +5% experience from kills." },
     { id = "general_camp", label = "Missing Camp Benefits", group = "General", hasLowWarningToggle = true, defaultThreshold = 300, range = { 0, 600, 10 }, description = "While leveling (from level 10), reminds you to get Camp Benefits (sit at a camp for a minute) when you're not resting, not in combat and not mounted. Camp Benefits combines the buffs of the camp's objects and lasts an hour." },
     { id = "general_talents", label = "Unspent Talent Points", group = "General", description = "Reminds you out of combat when you have talent points to spend, or talent changes you haven't confirmed (Apply) yet." },
+    { id = "general_legacy", label = "Unspent Legacy Points", group = "General", description = "Reminds you out of combat when you have Legacy points left to spend on Legacy perks." },
     { id = "general_group_check", label = "Check Supplies When Joining a Group", group = "General", description = "When you join a party or raid, show your supply reminders (reagents, ammo, repairs and so on) for a minute, even outside cities and inns. Only you see them, and not during combat." },
     { id = "general_group_announce", label = "Tell My Group", group = "General", defaultThreshold = 50, unit = "percent", sliderLabel = "Repairs below", range = { 0, 100, 5 }, description = "When you join a party or raid, post one line in group chat with what you're low on, for example \"[Prepped] you're at 47% durability, remember to repair soon.\" Once per group, never during combat. Durability is only mentioned below this percentage." },
     { id = "general_ready_check", label = "Check Supplies on Ready Check", group = "General", description = "During a ready check, show your supply reminders (reagents, ammo, repairs and so on) even outside cities and inns, so you know what you're short on before the pull. Not during combat." },
@@ -923,6 +924,17 @@ function Prepped:PrintDebugReport()
     DebugLine("Reagent Economy perk: %s%s", hasPerk and "yes" or "no", source and (" (" .. source .. ")") or "")
     local perks = API.GetLegacyPerks()
     DebugLine("Legacy perks: %s", perks and ListOrNone(perks) or "unavailable")
+    local legacyCurrencies = API.GetLegacyCurrencies()
+    if legacyCurrencies then
+        local parts = {}
+        for _, currency in ipairs(legacyCurrencies) do
+            parts[#parts + 1] = format("tree %s currency %s: %s", tostring(currency.treeID), tostring(currency.currencyID),
+                API.IsSecret(currency.quantity) and "hidden" or tostring(currency.quantity))
+        end
+        DebugLine("Unspent Legacy points: %s (%s)", tostring(API.GetUnspentLegacyPoints()), ListOrNone(parts))
+    else
+        DebugLine("Unspent Legacy points: unavailable")
+    end
     DebugLine("Spells seen working without their reagent: %s", ListOrNone(API.GetReagentFreeSpells()))
 
     for _, family in ipairs(API.GetAuraFamiliesForClass(classToken)) do
