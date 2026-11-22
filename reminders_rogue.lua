@@ -1,8 +1,10 @@
--- Rogue-specific reminders module
-local _, ns = ...
-local API = ns.API
+-- reminders_rogue.lua
+-- Rogue reminders: ammo, weapon poisons, poison stock, Flash and Blinding Powder.
 
-local RogueReminders = { class = "ROGUE" }
+local _, ns = ...
+local API, L, Action = ns.API, ns.L, ns.Action
+local Prepped = ns.Prepped
+local format = string.format
 
 local VANISH = API.SpellFamily("Vanish", { 1856, 1857 }, { class = "ROGUE" })
 local BLIND = API.SpellFamily("Blind", { 2094 }, { class = "ROGUE" })
@@ -13,79 +15,122 @@ local POISONS_SKILL_LINE = 40
 local FLASH_POWDER = 5140    -- vendor reagent
 local BLINDING_POWDER = 5530 -- made with Poisons, not sold by vendors
 
--- Poison item IDs (all ranks of each poison type)
-local POISON_ITEMS = {
-    6947, 6949, 6950, 8926, 8927, 8928, -- Instant Poison (Ranks 1-6)
-    2892, 2893, 8984, 8985, 20844,      -- Deadly Poison (Ranks 1-5)
-    3775, 3776,                         -- Crippling Poison (Ranks 1-2)
-    5237, 6951, 9186,                   -- Mind-numbing Poison (Ranks 1-3)
-    10918, 10920, 10921, 10922,         -- Wound Poison (Ranks 1-4)
-}
+-- Poison items, highest rank first.
+local INSTANT = { 8928, 8927, 8926, 6950, 6949, 6947 }
+local DEADLY = { 20844, 8985, 8984, 2893, 2892 }
+local CRIPPLING = { 3776, 3775 }
+local MIND_NUMBING = { 9186, 6951, 5237 }
+local WOUND = { 10922, 10921, 10920, 10918 }
 
-local rogueReminders = {
-    { id = "rogue_no_ammo", message = "No ammo/thrown equipped" },
-    { id = "rogue_ammo_critical", message = "Critically low on ammo/thrown (%s left)" },
-    {
-        id = "rogue_ammo_low",
-        message = "Low on ammo/thrown (%s left)",
-        mustRest = true,
-        suppressedBy = { "rogue_no_ammo", "rogue_ammo_critical" },
-    },
-    { id = "rogue_flash_powder", message = "Low on Flash Powder (%s left)", item = FLASH_POWDER, family = VANISH, mustRest = true },
-    {
-        id = "rogue_blinding_powder",
-        message = "Low on Blinding Powder (%s left)",
-        item = BLINDING_POWDER,
-        family = BLIND,
-        notSoldByVendors = true, -- Reagent Economy doesn't remove it
-        mustRest = true,
-    },
-    { id = "rogue_poison_stock", message = "Low on Poison (%s total)", mustRest = true },
-    {
-        id = "rogue_weapon_poison",
-        message = "Missing Weapon Poison!",
-        messageLow = "Weapon Poison expiring (%ss left)",
-        mustNotRest = true,
-        noTravel = true,
-    },
-}
+local POISON_ITEMS = {}
+for _, list in ipairs({ INSTANT, DEADLY, CRIPPLING, MIND_NUMBING, WOUND }) do
+    for _, id in ipairs(list) do POISON_ITEMS[#POISON_ITEMS + 1] = id end
+end
+
+-- What clicking applies: Instant Poison on the main hand, Deadly Poison on the
+-- off hand, else whatever poison you carry.
+local MAIN_HAND_CHOICE = { INSTANT, DEADLY, WOUND, MIND_NUMBING, CRIPPLING }
+local OFF_HAND_CHOICE = { DEADLY, INSTANT, CRIPPLING, WOUND, MIND_NUMBING }
+
+local function FindPoison(choices)
+    for _, list in ipairs(choices) do
+        for _, itemID in ipairs(list) do
+            local bag, slot = API.FindBagItem(itemID)
+            if bag then return itemID, bag, slot end
+        end
+    end
+    return nil
+end
 
 -- Learned Poisons (the poison-making skill)
 local function KnowsPoisons()
     return API.GetSkillRank(POISONS_SKILL_LINE) > 0 or API.KnowsFamily(POISONS)
 end
 
-local function CheckReagent(config) return Prepped:CheckReagent(config) end
-
-local checks = {
-    rogue_flash_powder = CheckReagent,
-    rogue_blinding_powder = CheckReagent,
-}
-
-function checks.rogue_no_ammo(config) return Prepped:CheckNoAmmo(config) end
-function checks.rogue_ammo_critical(config) return Prepped:CheckAmmoBelow(config) end
-checks.rogue_ammo_low = checks.rogue_ammo_critical
-
-function checks.rogue_poison_stock(config)
-    if not KnowsPoisons() then return nil end
-    local count = API.CountItems(POISON_ITEMS)
-    if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format(config.message, count), count
-    end
-    return nil
+local function PoisonIcon()
+    return API.GetItemIcon((FindPoison(MAIN_HAND_CHOICE)) or INSTANT[#INSTANT])
 end
 
--- Both weapons when dual wielding; only poisons count, not sharpening stones
--- (which Forever lets you use on top of a poison).
-function checks.rogue_weapon_poison(config)
-    if not KnowsPoisons() or API.CountItems(POISON_ITEMS) == 0 then return nil end
-    return Prepped:CheckWeaponImbue(config, true)
-end
+local function CheckReagent(rule) return Prepped:CheckReagent(rule) end
 
-function RogueReminders.CheckReminders()
-    Prepped:RunReminders(rogueReminders, checks)
-end
-
-if Prepped then
-    Prepped:RegisterReminderModule(RogueReminders)
-end
+Prepped:RegisterModule({
+    class = "ROGUE",
+    group = "Rogue",
+    reminders = {
+        {
+            id = "rogue_no_ammo", label = L["No Ammo/Thrown Equipped"],
+            description = L["Warns when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)."],
+            announce = { L["out of ammo"], L["buy more ammo"] },
+            icon = Prepped.AmmoIcon,
+            check = function() return Prepped:CheckNoAmmo() end,
+        },
+        {
+            id = "rogue_ammo_critical", label = L["Critical Ammo/Thrown"], defaultThreshold = 20, unit = "count", range = { 0, 500, 10 },
+            description = L["Warns at any time when your ammo or thrown weapons drop below this."],
+            announce = { L["low on ammo ({count} left)"], L["buy more ammo"] },
+            icon = Prepped.AmmoIcon,
+            check = function(rule) return Prepped:CheckAmmoBelow(rule, true) end,
+        },
+        {
+            id = "rogue_ammo_low", label = L["Low Ammo/Thrown"], defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 },
+            description = L["While resting, warns when your ammo or thrown weapons drop below this."],
+            announce = { L["low on ammo ({count} left)"], L["buy more ammo"] },
+            supply = true,
+            suppressedBy = { "rogue_no_ammo", "rogue_ammo_critical" },
+            icon = Prepped.AmmoIcon,
+            check = function(rule) return Prepped:CheckAmmoBelow(rule) end,
+        },
+        {
+            id = "rogue_flash_powder", label = L["Low Flash Powder"], defaultThreshold = 10, unit = "count", range = { 0, 40, 1 },
+            description = L["While resting, warns when you have less Flash Powder than this (for Vanish)."],
+            announce = { L["low on Flash Powder ({count} left)"], L["buy more Flash Powder"] },
+            supply = true, item = FLASH_POWDER, itemName = "Flash Powder", family = VANISH,
+            check = CheckReagent,
+        },
+        {
+            id = "rogue_blinding_powder", label = L["Low Blinding Powder"], defaultThreshold = 5, unit = "count", range = { 0, 40, 1 },
+            description = L["While resting, warns when you have less Blinding Powder than this (for Blind). It isn't a vendor reagent, so Reagent Economy doesn't hide it."],
+            announce = { L["low on Blinding Powder ({count} left)"], L["make more Blinding Powder"] },
+            supply = true, item = BLINDING_POWDER, itemName = "Blinding Powder", family = BLIND,
+            notSoldByVendors = true, -- Reagent Economy doesn't remove it
+            check = CheckReagent,
+        },
+        {
+            id = "rogue_poison_stock", label = L["Low Poison Stock"], defaultThreshold = 20, unit = "count", range = { 0, 100, 5 },
+            description = L["While resting, warns when you have fewer poisons than this, all kinds together."],
+            announce = { L["low on poisons ({count} left)"], L["make more poisons"] },
+            supply = true,
+            icon = PoisonIcon,
+            check = function(rule)
+                if not KnowsPoisons() then return nil end
+                local count = API.CountItems(POISON_ITEMS)
+                if count < Prepped:GetRuleThreshold(rule.id) then
+                    return format(L["Make %s (%d left)"], L["poisons"], count), count
+                end
+            end,
+        },
+        {
+            -- Both weapons when dual wielding; only poisons count, not sharpening
+            -- stones (which Forever lets you use on top of a poison).
+            id = "rogue_weapon_poison", label = L["Missing Weapon Poison"], hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 },
+            description = L["Reminds you to put poison on your weapons when you carry poisons. Clicking it applies one from your bags."],
+            adventuring = true, noTravel = true,
+            icon = PoisonIcon,
+            check = function(rule)
+                if not KnowsPoisons() or API.CountItems(POISON_ITEMS) == 0 then return nil end
+                local state, first, second = Prepped:CheckWeaponImbue(rule, true)
+                if state == "expiring" then return format(L["%s expires in %s"], L["Poison"], ns.FormatDuration(first)) end
+                if state ~= "missing" then return nil end
+                if first and second then return L["Apply poison to your weapons"] end
+                return first and L["Apply poison to your main hand"] or L["Apply poison to your off hand"]
+            end,
+            action = function()
+                local missingMain, missingOff = API.GetWeaponImbueState(true)
+                local slot = missingMain and API.MAIN_HAND_SLOT or (missingOff and API.OFF_HAND_SLOT) or nil
+                if not slot then return nil end
+                local itemID, bag, bagSlot = FindPoison(slot == API.MAIN_HAND_SLOT and MAIN_HAND_CHOICE or OFF_HAND_CHOICE)
+                return itemID and Action.UseItem(bag, bagSlot, itemID, slot) or nil
+            end,
+        },
+    },
+})

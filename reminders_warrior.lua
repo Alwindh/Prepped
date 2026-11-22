@@ -1,32 +1,37 @@
--- Warrior-specific reminders module
+-- reminders_warrior.lua
+-- Warrior reminders: ammo and thrown weapons.
 -- (Forever hides buffs from add-ons in combat, so there is no Battle Shout reminder.)
 
-local WarriorReminders = { class = "WARRIOR" }
+local _, ns = ...
+local L = ns.L
+local Prepped = ns.Prepped
 
-local warriorReminders = {
-    { id = "warrior_no_ammo", message = "No ammo/thrown equipped" },
-    { id = "warrior_ammo_critical", message = "Critically low on ammo/thrown (%s left)" },
-    {
-        id = "warrior_ammo_low",
-        message = "Low on ammo/thrown (%s left)",
-        mustRest = true,
-        suppressedBy = { "warrior_no_ammo", "warrior_ammo_critical" },
+Prepped:RegisterModule({
+    class = "WARRIOR",
+    group = "Warrior",
+    reminders = {
+        {
+            id = "warrior_no_ammo", label = L["No Ammo/Thrown Equipped"],
+            description = L["Warns when you have a ranged weapon equipped but no ammo in your ammo slot (or no thrown weapon charges)."],
+            announce = { L["out of ammo"], L["buy more ammo"] },
+            icon = Prepped.AmmoIcon,
+            check = function() return Prepped:CheckNoAmmo() end,
+        },
+        {
+            id = "warrior_ammo_critical", label = L["Critical Ammo/Thrown"], defaultThreshold = 20, unit = "count", range = { 0, 500, 10 },
+            description = L["Warns at any time when your ammo or thrown weapons drop below this."],
+            announce = { L["low on ammo ({count} left)"], L["buy more ammo"] },
+            icon = Prepped.AmmoIcon,
+            check = function(rule) return Prepped:CheckAmmoBelow(rule, true) end,
+        },
+        {
+            id = "warrior_ammo_low", label = L["Low Ammo/Thrown"], defaultThreshold = 100, unit = "count", range = { 0, 2000, 50 },
+            description = L["While resting, warns when your ammo or thrown weapons drop below this."],
+            announce = { L["low on ammo ({count} left)"], L["buy more ammo"] },
+            supply = true,
+            suppressedBy = { "warrior_no_ammo", "warrior_ammo_critical" },
+            icon = Prepped.AmmoIcon,
+            check = function(rule) return Prepped:CheckAmmoBelow(rule) end,
+        },
     },
-}
-
-local function NoAmmo(config) return Prepped:CheckNoAmmo(config) end
-local function AmmoBelow(config) return Prepped:CheckAmmoBelow(config) end
-
-local checks = {
-    warrior_no_ammo = NoAmmo,
-    warrior_ammo_critical = AmmoBelow,
-    warrior_ammo_low = AmmoBelow,
-}
-
-function WarriorReminders.CheckReminders()
-    Prepped:RunReminders(warriorReminders, checks)
-end
-
-if Prepped then
-    Prepped:RegisterReminderModule(WarriorReminders)
-end
+})

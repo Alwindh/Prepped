@@ -1,14 +1,17 @@
 -- tests/mock_client.lua
 -- A strict mock of the WoW Forever client (interface 16001), so Prepped can run
 -- outside the game. "Strict": fields a real frame or API table doesn't have are
--- nil, so code that relies on something the client lacks fails the tests.
+-- nil, so code that relies on something the client lacks fails the tests. Secure
+-- (protected) frames refuse changes during the combat lockdown, like the client.
 --
 -- Mock.BuildEnv(S) returns the global environment for one scenario. S describes
 -- the character and the world (all fields optional):
---   class, level, locale ("enUS" or "deDE"; German names get a "DE:" prefix), time
+--   class, level, locale ("enUS", "deDE", "frFR", "esES"; translated names get a
+--                        "DE:"/"FR:"/"ES:" prefix), time
 --   spells, futureSpells     learned / listed-but-not-learned spell IDs
 --   buffs                    { { spellId = id, expires = time }, ... }
---   items                    { [itemID] = count } (C_Item.GetItemCount)
+--   items                    { [itemID] = count } (C_Item.GetItemCount; every character
+--                            carries a Hearthstone unless noHearthstone or items[6948] says otherwise)
 --   bags                     { { bag = n, slot = n, itemID = id, count = n }, ... }
 --   equipped                 { [inventorySlot] = itemID }
 --   enchants                 { [Enum.WeaponSlot] = { { type = Mock.IMBUE, ms = n, id = n }, ... } }
@@ -17,10 +20,13 @@
 --   unspentLegacy            Legacy points left to spend: { professions, adventure, progression },
 --                            or a number for one currency shared by the three Legacy trees
 --   pet                      { dead, happiness, foodTypes, canEat = { [itemID] = true } }
+--   petActions               { { spellID = id, autocast = bool }, ... } (the pet action bar)
 --   form                     shapeshift form ID (1 cat, 3 travel, 4 aquatic, 5 bear, ...)
 --   resting, inCombat, mounted, dead, inGroup, inRaid, instanceGroup, xpDisabled
+--   instanceType             "party" or "raid" while in a dungeon or raid instance
 --   chatLockdown             Forever blocks add-on chat messages (combat restrictions)
 --   ammoCount, rangedCount, rangedDurability, headDurability
+--   durability               { [inventorySlot] = { current, max } }
 --   aurasSecret              buff data hidden (combat): aura scans error, like on Forever
 --   secretBuffs, neverSecret { [spellID] = true }: individually hidden / never-hidden buffs
 --   reagentEconomy           the Legacy perk is learned (vendor reagents aren't needed)
@@ -29,13 +35,17 @@
 --   uncachedItems            { [itemID] = true }: item data not loaded yet (GetItemInfo/GetItemSpell return nil)
 --   tooltipsDontNameBuff     food tooltips word the food buff differently from the buff's name
 --   noTooltipAPI             the client has no C_TooltipInfo
+--   noMenuUtil               the client has no MenuUtil (context menus)
 --   missingSpellIDs          { [spellID] = true } the client doesn't know
 --   breakSettings            the Settings API errors
+--   shift                    Shift is held down
 
 local Mock = {
     IMBUE = 3,      -- Enum.ItemEnchantType.Imbue (poisons, shaman imbues, warlock stones)
     TEMPORARY = 2,  -- Enum.ItemEnchantType.Temporary (sharpening stones, oils)
     metadata = {},  -- the TOC's "## Key: value" lines, set by the runner
+    SCREEN_WIDTH = 1920,
+    SCREEN_HEIGHT = 1080,
 }
 
 ------------------------------------------------------------------------
@@ -56,17 +66,20 @@ local function IsSecretValue(v) return type(v) == "table" and getmetatable(v) ==
 local SPELLS = {}
 local function def(name, ...) for _, id in ipairs({ ... }) do SPELLS[id] = name end end
 def("Drink", 430, 431, 432, 1133, 1135, 1137)
+def("Food", 433, 434, 435, 1127, 1129, 1131)
 def("Well Fed", 1248406, 19705, 19706, 19708, 19709, 19710, 19711, 24799) -- 1248406: Forever's cooked food
 def("Camp Benefits", 1229741)
 -- Hunter
-def("Tame Beast", 1515)
+def("Tame Beast", 1515); def("Call Pet", 883); def("Revive Pet", 982); def("Feed Pet", 6991)
 def("Aspect of the Hawk", 13165, 14318, 14319, 14320, 14321, 14322, 25296)
 def("Aspect of the Monkey", 13163); def("Aspect of the Cheetah", 5118); def("Aspect of the Pack", 13159)
 def("Aspect of the Beast", 13161); def("Aspect of the Wild", 20043, 20190)
+def("Growl", 2649, 14916, 14917, 14918, 14919, 14920, 14921); def("Bite", 17253)
 -- Mage
 def("Arcane Intellect", 1459, 1460, 1461, 10156, 10157); def("Arcane Brilliance", 23028)
 def("Frost Armor", 168, 7300, 7301); def("Ice Armor", 7302, 7320, 10219, 10220); def("Mage Armor", 6117, 22782, 22783)
 def("Conjure Mana Agate", 759); def("Conjure Mana Jade", 3552); def("Conjure Mana Citrine", 10053); def("Conjure Mana Ruby", 10054)
+def("Conjure Water", 5504, 5505, 5506, 6127, 10138, 10139, 10140); def("Conjure Food", 587, 597, 990, 6129, 10144, 10145, 28612)
 def("Teleport: Stormwind", 3561); def("Teleport: Ironforge", 3562); def("Teleport: Undercity", 3563)
 def("Teleport: Darnassus", 3565); def("Teleport: Thunder Bluff", 3566); def("Teleport: Orgrimmar", 3567)
 def("Portal: Stormwind", 10059); def("Portal: Ironforge", 11416); def("Portal: Orgrimmar", 11417)
@@ -92,6 +105,8 @@ def("Vanish", 1856, 1857); def("Poisons", 2842); def("Blind", 2094)
 def("Lightning Shield", 324, 325, 905, 945, 8134, 10431, 10432)
 def("Water Shield", 900001) -- new in Forever; its real spell ID isn't known yet
 def("Reincarnation", 20608); def("Water Walking", 546); def("Water Breathing", 131)
+def("Rockbiter Weapon", 8017, 8018, 8019, 10399, 16314, 16315, 16316); def("Flametongue Weapon", 8024, 8027, 8030, 16339, 16341, 16342)
+def("Frostbrand Weapon", 8033, 8038, 10456, 16355, 16356); def("Windfury Weapon", 8232, 8235, 10486, 16362)
 def("Stoneskin Totem", 8071, 8154, 8155, 10406, 10407, 10408); def("Earthbind Totem", 2484)
 def("Stoneclaw Totem", 5730, 6390, 6391, 6392, 10427, 10428); def("Strength of Earth Totem", 8075, 8160, 8161, 10442, 25361)
 def("Tremor Totem", 8143)
@@ -109,6 +124,7 @@ def("Battle Shout", 6673, 5242, 6192, 11549, 11550, 11551, 25289)
 -- Warlock
 def("Demon Skin", 687, 696); def("Demon Armor", 706, 1086, 11733, 11734, 11735)
 def("Summon Imp", 688); def("Summon Voidwalker", 697); def("Summon Succubus", 712); def("Summon Felhunter", 691)
+def("Torment", 3716, 7809, 7810, 7811, 11774, 11775); def("Suffering", 17735, 17750, 17751, 17752)
 def("Create Healthstone (Minor)", 6201); def("Create Healthstone (Lesser)", 6202); def("Create Healthstone", 5699)
 def("Create Healthstone (Greater)", 11729); def("Create Healthstone (Major)", 11730)
 def("Create Soulstone (Minor)", 693); def("Create Soulstone (Lesser)", 20752); def("Create Soulstone", 20755)
@@ -123,6 +139,7 @@ def("Rebirth", 20484, 20739, 20742, 20747, 20748, 888888) -- 888888: a Rebirth r
 def("Teleport: Moonglade", 18960)
 -- Legacy perks
 def("Reagent Economy", 1262650); def("Some Other Perk", 999999)
+Mock.SPELLS = SPELLS
 
 -- The reagent each spell needs: a spell is usable (C_Spell.IsSpellUsable) only
 -- with its reagent in the bags, unless a perk removes it. Reincarnation is only
@@ -154,20 +171,56 @@ local ITEMS = {
     [1201] = { name = "Dull Heater Shield", classID = 4, subClassID = 6 },
     [2131] = { name = "Shortsword", classID = 2, subClassID = 7 },
     [159] = { name = "Refreshing Spring Water", classID = 0, subClassID = 5, spell = 430, use = DRINK },
-    [117] = { name = "Tough Jerky", classID = 0, subClassID = 5, use = EAT },
-    [4536] = { name = "Shiny Red Apple", classID = 0, subClassID = 5, use = EAT },
-    [2680] = { name = "Spiced Wolf Meat", classID = 0, subClassID = 5, use = EAT, wellFed = "2 Stamina and Spirit" },
-    [6888] = { name = "Herb Baked Egg", classID = 0, subClassID = 5, use = EAT, wellFed = "2 Stamina and Spirit" },
+    [5350] = { name = "Conjured Water", classID = 0, subClassID = 5, spell = 430, use = DRINK },
+    [117] = { name = "Tough Jerky", classID = 0, subClassID = 5, spell = 433, use = EAT },
+    [4536] = { name = "Shiny Red Apple", classID = 0, subClassID = 5, spell = 433, use = EAT },
+    [5349] = { name = "Conjured Muffin", classID = 0, subClassID = 5, spell = 433, use = EAT },
+    [2680] = { name = "Spiced Wolf Meat", classID = 0, subClassID = 5, spell = 433, use = EAT, wellFed = "2 Stamina and Spirit" },
+    [6888] = { name = "Herb Baked Egg", classID = 0, subClassID = 5, spell = 433, use = EAT, wellFed = "2 Stamina and Spirit" },
     -- Forever also has drinks that give the food buff; this one (name and ID) is made up
     [900003] = { name = "Berry Smoothie", classID = 0, subClassID = 5, spell = 430, use = DRINK, wellFed = "5% experience from kills" },
+    [1251] = { name = "Linen Bandage", classID = 0, subClassID = 7 },
+    [6948] = { name = "Hearthstone", classID = 15, subClassID = 0 },
+    -- Reagents
+    [17020] = { name = "Arcane Powder" }, [17031] = { name = "Rune of Teleportation" }, [17032] = { name = "Rune of Portals" },
+    [17030] = { name = "Ankh" }, [17058] = { name = "Fish Oil" }, [17057] = { name = "Shiny Fish Scales" },
+    [21177] = { name = "Symbol of Kings" }, [17033] = { name = "Symbol of Divinity" },
+    [17028] = { name = "Holy Candle" }, [17029] = { name = "Sacred Candle" },
+    [17034] = { name = "Maple Seed" }, [17035] = { name = "Stranglethorn Seed" }, [17036] = { name = "Ashwood Seed" },
+    [17037] = { name = "Hornbeam Seed" }, [17038] = { name = "Ironwood Seed" },
+    [17021] = { name = "Wild Berries" }, [17026] = { name = "Wild Thornroot" },
+    [5140] = { name = "Flash Powder" }, [5530] = { name = "Blinding Powder" }, [6265] = { name = "Soul Shard" },
+    [5175] = { name = "Earth Totem" }, [5176] = { name = "Fire Totem" }, [5177] = { name = "Water Totem" }, [5178] = { name = "Air Totem" },
+    -- Poisons, stones, gems
+    [6947] = { name = "Instant Poison", classID = 0, subClassID = 8 }, [8928] = { name = "Instant Poison VI", classID = 0, subClassID = 8 },
+    [2892] = { name = "Deadly Poison", classID = 0, subClassID = 8 }, [3775] = { name = "Crippling Poison", classID = 0, subClassID = 8 },
+    [5512] = { name = "Minor Healthstone" }, [5232] = { name = "Minor Soulstone" }, [5514] = { name = "Mana Agate" },
+    [1254] = { name = "Lesser Firestone" }, [13699] = { name = "Firestone" }, [5522] = { name = "Spellstone" },
 }
+Mock.ITEMS = ITEMS
+
+local LOCALE_PREFIX = { deDE = "DE:", frFR = "FR:", esES = "ES:", esMX = "ES:" }
+local CLASS_NAMES = { DRUID = "Druid", HUNTER = "Hunter", MAGE = "Mage", PALADIN = "Paladin", PRIEST = "Priest",
+    ROGUE = "Rogue", SHAMAN = "Shaman", WARLOCK = "Warlock", WARRIOR = "Warrior" }
+
+-- Where frame points sit on a frame: fraction of its width, of its height.
+local ANCHORS = {
+    TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 }, LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 },
+    RIGHT = { 1, 0.5 }, BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
+}
+
+-- What a protected frame refuses during the combat lockdown.
+local BLOCKED_IN_COMBAT = {}
+for m in ([[Show Hide SetPoint ClearAllPoints SetAllPoints SetSize SetWidth SetHeight SetAttribute SetParent
+    SetFrameLevel SetFrameStrata EnableMouse RegisterForClicks]]):gmatch("%S+") do BLOCKED_IN_COMBAT[m] = true end
 
 ------------------------------------------------------------------------
 -- Environment builder
 ------------------------------------------------------------------------
 function Mock.BuildEnv(S)
     local locale = S.locale or "enUS"
-    local function Loc(name) if name and locale == "deDE" then return "DE:" .. name end return name end
+    local prefix = LOCALE_PREFIX[locale]
+    local function Loc(name) if name and prefix then return prefix .. name end return name end
     local function SpellName(id)
         if S.missingSpellIDs and S.missingSpellIDs[id] then return nil end
         return Loc(SPELLS[id])
@@ -188,19 +241,25 @@ function Mock.BuildEnv(S)
     env.geterrorhandler = function() return function(e) errors[#errors + 1] = tostring(e) end end
     env.__printed, env.__errors = printed, errors
 
+    -- The combat lockdown starts after PLAYER_REGEN_DISABLED has been handled.
+    local function InLockdown() return S.inCombat == true and not env.__regenDisabling end
+    env.__blocked = {} -- protected frame changes refused during the lockdown
+
     -- Frames (strict: unknown fields are nil, like on real frames) -------
     local eventFrames, updateFrames = {}, {}
     local Methods = {}
     local NOOP = function() end
     local NOOP_METHODS = {}
-    for m in ([[SetPoint SetSize SetWidth SetHeight ClearAllPoints SetAllPoints SetColorTexture SetTextColor
-        SetJustifyH SetJustifyV SetWordWrap SetFont SetFrameLevel SetFrameStrata SetTexture SetVertexColor
-        SetAlpha SetScale SetParent EnableMouse UnregisterEvent UnregisterAllEvents HookScript
-        SetFontObject]]):gmatch("%S+") do NOOP_METHODS[m] = true end
-    local function NewObject(kind, name, parent)
-        local obj = { __kind = kind, __name = name, __parent = parent, __shown = true, __scripts = {}, __events = {} }
-        setmetatable(obj, { __index = function(_, k)
+    for m in ([[SetColorTexture SetTextColor SetJustifyH SetJustifyV SetWordWrap SetVertexColor SetAlpha SetScale
+        UnregisterEvent UnregisterAllEvents HookScript SetFontObject SetTexCoord SetParent]]):gmatch("%S+") do NOOP_METHODS[m] = true end
+    local function NewObject(kind, name, parent, template)
+        local obj = { __kind = kind, __name = name, __parent = parent, __shown = true, __scripts = {}, __events = {},
+            __attrs = {}, __template = template, __protected = template ~= nil and template:find("Secure", 1, true) ~= nil }
+        setmetatable(obj, { __index = function(self, k)
             if type(k) == "string" and k:sub(1, 2) == "__" then return nil end
+            if rawget(self, "__protected") and BLOCKED_IN_COMBAT[k] and InLockdown() then
+                return function() env.__blocked[#env.__blocked + 1] = k end
+            end
             if Methods[k] then return Methods[k] end
             if NOOP_METHODS[k] then return NOOP end
             return nil
@@ -208,10 +267,13 @@ function Mock.BuildEnv(S)
         if name then env[name] = obj end
         return obj
     end
+    Mock.NewObject = NewObject
     function Methods:Show() self.__shown = true; local s = rawget(self, "__scripts").OnShow; if s then s(self) end end
     function Methods:Hide() self.__shown = false end
     function Methods:IsShown() return self.__shown end
+    function Methods:IsVisible() return self.__shown and (self.__parent == nil or self.__parent == env.UIParent or self.__parent:IsVisible()) end
     function Methods:GetName() return self.__name end
+    function Methods:GetParent() return self.__parent end
     function Methods:SetScript(k, f)
         self.__scripts[k] = f
         if k == "OnUpdate" then updateFrames[self] = f and true or nil end
@@ -222,12 +284,85 @@ function Mock.BuildEnv(S)
     function Methods:SetText(t) self.__text = t end
     function Methods:GetText() return self.__text end
     function Methods:GetUnboundedStringWidth() return #(self.__text or "") * 7 end
-    function Methods:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "" end
-    function Methods:CreateTexture() return NewObject("Texture") end
-    function Methods:CreateFontString() return NewObject("FontString") end
+    function Methods:GetFont() return "Fonts\\FRIZQT__.TTF", self.__fontSize or 12, "" end
+    function Methods:SetFont(_, size) self.__fontSize = size end
+    function Methods:SetTexture(texture) self.__texture = texture end
+    function Methods:GetTexture() return self.__texture end
+    function Methods:CreateTexture() return NewObject("Texture", nil, self) end
+    function Methods:CreateFontString() return NewObject("FontString", nil, self) end
+    function Methods:SetFrameStrata(strata) self.__strata = strata end
+    function Methods:GetFrameStrata() return self.__strata or "MEDIUM" end
+    function Methods:SetFrameLevel(level) self.__level = level end
+    function Methods:GetFrameLevel() return self.__level or 1 end
+    function Methods:EnableMouse(enable) self.__mouse = enable end
+    function Methods:EnableKeyboard(enable) self.__keyboard = enable end
+    function Methods:SetPropagateKeyboardInput(propagate)
+        if InLockdown() then env.__blocked[#env.__blocked + 1] = "SetPropagateKeyboardInput"; return end
+        self.__propagate = propagate
+    end
+    function Methods:RegisterForDrag(...) self.__drag = { ... } end
+    function Methods:RegisterForClicks(...) self.__clicks = { ... } end
+    function Methods:SetMovable(movable) self.__movable = movable end
+    function Methods:SetClampedToScreen(clamped) self.__clamped = clamped end
+    function Methods:SetDontSavePosition(dontSave) self.__dontSave = dontSave end
+    function Methods:StartMoving() env.__moving = self end
+    function Methods:StopMovingOrSizing() env.__moving = nil end
+    function Methods:SetAttribute(key, value) self.__attrs[key] = value end
+    function Methods:GetAttribute(key) return self.__attrs[key] end
+    function Methods:IsProtected() return self.__protected, self.__protected end
 
-    env.CreateFrame = function(kind, name, parent)
-        return NewObject(kind, name, parent)
+    -- Geometry: frames keep their size and anchors, and the Get* methods resolve
+    -- them through the anchor chain, with UIParent filling a 1920x1080 screen.
+    function Methods:SetPoint(point, a, b, c, d)
+        local relativeTo, relativePoint, x, y
+        if type(a) == "table" then
+            relativeTo = a
+            if type(b) == "string" then relativePoint, x, y = b, c, d else relativePoint, x, y = point, b, c end
+        else
+            relativeTo, relativePoint, x, y = self.__parent, point, a, b
+        end
+        local points = rawget(self, "__points") or {}
+        for i, p in ipairs(points) do if p[1] == point then table.remove(points, i) break end end
+        points[#points + 1] = { point, relativeTo or env.UIParent, relativePoint, x or 0, y or 0 }
+        self.__points = points
+    end
+    function Methods:ClearAllPoints() self.__points = {}; self.__allPoints = nil end
+    function Methods:SetAllPoints(relativeTo) self.__allPoints = relativeTo or self.__parent end
+    function Methods:SetSize(w, h) self.__w, self.__h = w, h end
+    function Methods:SetWidth(w) self.__w = w end
+    function Methods:SetHeight(h) self.__h = h end
+    function Methods:GetWidth() return self.__w or 0 end
+    function Methods:GetHeight() return self.__h or 0 end
+    function Methods:GetSize() return self.__w or 0, self.__h or 0 end
+    function Methods:GetPoint(i)
+        local p = (rawget(self, "__points") or {})[i or 1]
+        if p then return p[1], p[2], p[3], p[4], p[5] end
+    end
+    function Methods:GetNumPoints() return #(rawget(self, "__points") or {}) end
+    function Methods:GetEffectiveScale() return 1 end
+    function Methods:GetScale() return 1 end
+    local function Rect(frame, depth)
+        if frame == env.UIParent then return 0, 0, Mock.SCREEN_WIDTH, Mock.SCREEN_HEIGHT end
+        if (depth or 0) > 20 then return nil end
+        local all = rawget(frame, "__allPoints")
+        if all then return Rect(all, (depth or 0) + 1) end
+        local p = (rawget(frame, "__points") or {})[1]
+        if not p then return nil end
+        local rl, rb, rw, rh = Rect(p[2], (depth or 0) + 1)
+        if not rl then return nil end
+        local rp, fp = ANCHORS[p[3]], ANCHORS[p[1]]
+        local w, h = rawget(frame, "__w") or 0, rawget(frame, "__h") or 0
+        return rl + rp[1] * rw + p[4] - fp[1] * w, rb + rp[2] * rh + p[5] - fp[2] * h, w, h
+    end
+    function Methods:GetRect() return Rect(self) end
+    function Methods:GetCenter() local l, b, w, h = Rect(self); if l then return l + w / 2, b + h / 2 end end
+    function Methods:GetLeft() return (Rect(self)) end
+    function Methods:GetBottom() local _, b = Rect(self); return b end
+    function Methods:GetTop() local _, b, _, h = Rect(self); if b then return b + h end end
+    function Methods:GetRight() local l, _, w = Rect(self); if l then return l + w end end
+
+    env.CreateFrame = function(kind, name, parent, template)
+        return NewObject(kind, name, parent, template)
     end
     env.UIParent = NewObject("Frame", "UIParent")
     env.GameFontNormalLarge = NewObject("Font", "GameFontNormalLarge")
@@ -236,6 +371,7 @@ function Mock.BuildEnv(S)
 
     -- Fires an event at every frame registered for it (unit events: matching unit only).
     env.__fire = function(event, ...)
+        if event == "PLAYER_REGEN_DISABLED" then env.__regenDisabling = true end
         for f in pairs(eventFrames) do
             local reg = f.__events[event]
             local unit = ...
@@ -245,6 +381,7 @@ function Mock.BuildEnv(S)
             end
             if matches and f.__scripts.OnEvent then f.__scripts.OnEvent(f, event, ...) end
         end
+        env.__regenDisabling = nil
     end
 
     -- Lets time pass: advances GetTime() and runs every OnUpdate script, in 0.1 s steps.
@@ -253,6 +390,86 @@ function Mock.BuildEnv(S)
             S.time = (S.time or 1000) + 0.1
             for f in pairs(updateFrames) do f.__scripts.OnUpdate(f, 0.1) end
         end
+    end
+
+    -- Mouse and keyboard. A click on a secure action button runs its action
+    -- (recorded in env.__actions), then PostClick, like the client.
+    env.__actions = {}
+    env.__click = function(button, mouseButton)
+        mouseButton = mouseButton or "LeftButton"
+        if not button.__shown then return false end
+        if button.__protected then
+            local attrs = button.__attrs
+            local suffix = (mouseButton == "LeftButton" and "1") or (mouseButton == "RightButton" and "2") or ""
+            local kind = attrs["type" .. suffix] or attrs.type
+            if kind then
+                env.__actions[#env.__actions + 1] = { type = kind, spell = attrs.spell, unit = attrs.unit, item = attrs.item,
+                    targetSlot = attrs["target-slot"], macrotext = attrs.macrotext }
+            end
+        end
+        local post = button.__scripts.PostClick
+        if post then post(button, mouseButton, false) end
+        return true
+    end
+    env.__enter = function(frame) local f = frame.__scripts.OnEnter; if f then f(frame) end end
+    env.__leave = function(frame) local f = frame.__scripts.OnLeave; if f then f(frame) end end
+    env.__mouseUp = function(frame, button) local f = frame.__scripts.OnMouseUp; if f then f(frame, button) end end
+    env.__key = function(frame, key)
+        local f = frame.__scripts.OnKeyDown
+        if f and frame.__keyboard then f(frame, key) end
+    end
+    -- Drags `handle` by dx, dy: OnDragStart, the frame being moved moves, OnDragStop.
+    env.__drag = function(handle, dx, dy)
+        local start = handle.__scripts.OnDragStart
+        if start then start(handle, "LeftButton") end
+        local moving = env.__moving
+        if moving then
+            local l, b = moving:GetRect()
+            moving.__points = { { "BOTTOMLEFT", env.UIParent, "BOTTOMLEFT", l + dx, b + dy } }
+        end
+        local stop = handle.__scripts.OnDragStop
+        if stop then stop(handle) end
+    end
+
+    local tooltip = NewObject("GameTooltip", "GameTooltip")
+    tooltip.__lines = {}
+    function tooltip.SetOwner(self, owner) self.__owner = owner; self.__lines = {} end
+    function tooltip.SetText(self, text) self.__lines = { text } end
+    function tooltip.AddLine(self, text) self.__lines[#self.__lines + 1] = text end
+    function tooltip.GetOwner(self) return self.__owner end
+    env.__tooltipLines = function() return tooltip.__shown and tooltip.__lines or {} end
+
+    if not S.noMenuUtil then
+        env.MenuUtil = {
+            CreateContextMenu = function(owner, generator)
+                local menu = { owner = owner, items = {} }
+                local root = {}
+                function root.CreateTitle(_, text) menu.items[#menu.items + 1] = { kind = "title", text = text } end
+                function root.CreateButton(_, text, callback) menu.items[#menu.items + 1] = { kind = "button", text = text, callback = callback } end
+                function root.CreateDivider() menu.items[#menu.items + 1] = { kind = "divider" } end
+                generator(owner, root)
+                env.__menu = menu
+                return menu
+            end,
+        }
+    end
+    -- Clicks the menu entry with this text.
+    env.__menuClick = function(text)
+        for _, item in ipairs(env.__menu and env.__menu.items or {}) do
+            if item.text == text and item.callback then item.callback(); return true end
+        end
+        return false
+    end
+
+    local callbacks = {}
+    env.EventRegistry = {
+        RegisterCallback = function(_, event, func, owner)
+            callbacks[event] = callbacks[event] or {}
+            table.insert(callbacks[event], { func, owner })
+        end,
+    }
+    env.__callback = function(event, ...)
+        for _, c in ipairs(callbacks[event] or {}) do c[1](c[2], ...) end
     end
 
     -- Group chat: messages the add-on sends are kept in env.__chat
@@ -322,7 +539,7 @@ function Mock.BuildEnv(S)
     env.CreateSettingsListSectionHeaderInitializer = function(name) return NewInitializer("header", { name = name }) end
     env.CreateSettingsButtonInitializer = function(name, text, click, tooltip, addSearchTags)
         assert(addSearchTags ~= nil, "addSearchTags is required")
-        return NewInitializer("button", { name = name, click = click })
+        return NewInitializer("button", { name = name, text = text, click = click })
     end
     env.MinimalSliderWithSteppersMixin = { Label = { Left = 1, Right = 2, Top = 3, Min = 4, Max = 5 } }
     env.CreateColor = function(r, g, b)
@@ -335,9 +552,12 @@ function Mock.BuildEnv(S)
         return { GetRGB = function() return r, g, b end }
     end
     if S.breakSettings then env.Settings.RegisterVerticalLayoutCategory = function() error("settings broken") end end
+    env.LOCALIZED_CLASS_NAMES_MALE = {}
+    for token, name in pairs(CLASS_NAMES) do env.LOCALIZED_CLASS_NAMES_MALE[token] = Loc(name) end
 
     -- Character and world state ------------------------------------------
     env.GetTime = function() return S.time or 1000 end
+    env.GetServerTime = function() return 1700000000 + math.floor(S.time or 1000) end
     env.GetLocale = function() return locale end
     env.UnitName = function() return "Tester" end
     env.GetRealmName = function() return "Ruleset" end
@@ -346,6 +566,7 @@ function Mock.BuildEnv(S)
     env.GetMaxPlayerLevel = function() return 60 end
     env.GetMaxLevelForPlayerExpansion = function() return 60 end
     env.IsXPUserDisabled = function() return S.xpDisabled == true end
+    env.IsShiftKeyDown = function() return S.shift == true end
     local noMana = S.class == "WARRIOR" or S.class == "ROGUE"
     env.UnitPowerType = function()
         if S.form == 1 then return 3 end                -- cat form: energy
@@ -361,7 +582,7 @@ function Mock.BuildEnv(S)
     env.UnitIsDeadOrGhost = function() return S.dead == true end
     env.UnitOnTaxi = function() return false end
     env.UnitAffectingCombat = function() return S.inCombat == true end
-    env.InCombatLockdown = function() return S.inCombat == true end
+    env.InCombatLockdown = InLockdown
     env.IsMounted = function() return S.mounted == true end
     env.IsInGroup = function(category)
         if category == 2 then return S.instanceGroup == true end
@@ -371,6 +592,7 @@ function Mock.BuildEnv(S)
         if category == 2 then return false end
         return S.inRaid == true
     end
+    env.IsInInstance = function() return S.instanceType ~= nil, S.instanceType or "none" end
     env.GetNumGroupMembers = function() return (S.inGroup or S.inRaid or S.instanceGroup) and 5 or 0 end
     env.UnitExists = function(u) return u == "player" or (u == "pet" and S.pet ~= nil) end
     env.UnitIsDead = function(u) return u == "pet" and S.pet and S.pet.dead or false end
@@ -380,7 +602,13 @@ function Mock.BuildEnv(S)
         if slot == 18 then return S.rangedCount or 1 end
         return 1
     end
+    env.GetInventoryItemTexture = function(_, slot)
+        if slot == 0 then return (S.ammoCount or 0) > 0 and "itemicon:ammo" or nil end
+        local id = S.equipped and S.equipped[slot]
+        return id and ("itemicon:" .. id) or nil
+    end
     env.GetInventoryItemDurability = function(slot)
+        if S.durability and S.durability[slot] then return S.durability[slot][1], S.durability[slot][2] end
         if slot == 18 and S.rangedDurability then return S.rangedDurability, S.rangedDurability end
         if slot == 1 then return S.headDurability or 100, 100 end
         return nil
@@ -406,11 +634,15 @@ function Mock.BuildEnv(S)
             return NumSlots(bag) - used, 0
         end,
     }
+    env.CanMerchantRepair = function() return S.merchantCanRepair == true end
+    env.__talentWindowOpened = 0
+    env.ToggleTalentFrame = function() env.__talentWindowOpened = env.__talentWindowOpened + 1 end
     env.__sounds = {}
     env.SOUNDKIT = { MAP_PING = 3175 }
     env.PlaySound = function(soundKitID) env.__sounds[#env.__sounds + 1] = soundKitID; return true end
     env.Enum = {
         ItemClass = { Consumable = 0, Weapon = 2, Armor = 4 },
+        ItemConsumableSubclass = { Fooddrink = 5, Bandage = 7 },
         ItemWeaponSubclass = { Thrown = 16 },
         SpellBookSpellBank = { Player = 0, Pet = 1 },
         SpellBookItemType = { None = 0, Spell = 1, FutureSpell = 2 },
@@ -421,21 +653,29 @@ function Mock.BuildEnv(S)
     env.C_EventUtils = { IsEventValid = function() return true end }
     env.WOW_PROJECT_ID, env.WOW_PROJECT_CAMELOT = 18, 18
 
+    local function ItemCached(id) return ITEMS[id] ~= nil and not (S.uncachedItems and S.uncachedItems[id]) end
     env.C_Item = {
         GetItemInfo = function(id)
-            local it = ITEMS[id]; if not it or (S.uncachedItems and S.uncachedItems[id]) then return nil end
+            if not ItemCached(id) then return nil end
+            local it = ITEMS[id]
             return Loc(it.name), "link", 1, 1, 1, "type", "subtype", 20, "", 0, 0, it.classID, it.subClassID
         end,
+        GetItemNameByID = function(id) if ItemCached(id) then return Loc(ITEMS[id].name) end end,
         GetItemInfoInstant = function(id)
             local it = ITEMS[id]; if not it then return nil end
-            return id, "type", "subtype", "", 0, it.classID, it.subClassID
+            return id, "type", "subtype", "", "itemicon:" .. id, it.classID, it.subClassID
         end,
-        GetItemCount = function(id) return (S.items and S.items[id]) or 0 end,
+        GetItemCount = function(id)
+            local count = S.items and S.items[id]
+            if count == nil and id == 6948 and not S.noHearthstone then return 1 end -- everyone starts with one
+            return count or 0
+        end,
         GetItemSpell = function(id)
             if S.uncachedItems and S.uncachedItems[id] then return nil end
             local it = ITEMS[id]
             if it and it.spell then return SpellName(it.spell), it.spell end
         end,
+        RequestLoadItemDataByID = function() end,
         GetWeaponEnchantInfo = function(slot)
             local list = {}
             for _, e in ipairs((S.enchants and S.enchants[slot]) or {}) do
@@ -475,6 +715,7 @@ function Mock.BuildEnv(S)
     env.__usableChecks = 0
     env.C_Spell = {
         GetSpellName = SpellName,
+        GetSpellTexture = function(id) if SPELLS[id] then return "spellicon:" .. id end end,
         -- isUsable, insufficientPower. Needs the spell's reagent unless a perk removes it.
         IsSpellUsable = function(id)
             env.__usableChecks = env.__usableChecks + 1
@@ -582,6 +823,13 @@ function Mock.BuildEnv(S)
         GetPetFoodTypes = function() return S.pet and S.pet.foodTypes or {} end,
         CanPetEatItem = function(id) return S.pet ~= nil and S.pet.canEat ~= nil and S.pet.canEat[id] == true end,
     }
+    -- The pet action bar (modern return values)
+    env.NUM_PET_ACTION_SLOTS = 10
+    env.GetPetActionInfo = function(index)
+        local action = S.pet and S.petActions and S.petActions[index]
+        if not action then return nil end
+        return SpellName(action.spellID), "spellicon:" .. action.spellID, false, false, true, action.autocast == true, action.spellID
+    end
     return env
 end
 

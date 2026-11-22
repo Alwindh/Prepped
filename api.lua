@@ -1,5 +1,5 @@
 -- api.lua
--- WoW Forever helpers shared by the reminder modules.
+-- WoW Forever helpers shared by Prepped's modules.
 --
 -- Spells are identified by spell ID; their names come from the client
 -- (C_Spell.GetSpellName), so detection works in every client language.
@@ -61,13 +61,15 @@ API.InCombat = InCombat
 -- Spell families
 ------------------------------------------------------------------------
 -- A family groups the spell IDs that count as one thing: every rank of a
--- spell, or a set like "all seals". The client turns the IDs into localized
+-- spell, or a set like "all auras". The client turns the IDs into localized
 -- names, which also cover ranks that aren't listed.
 --   opts.class          class token the family belongs to (debug grouping)
 --   opts.aura           the family is a buff on the player (debug: secrecy)
 --   opts.englishNames   fallback names for spells whose Forever ID is unknown
---   opts.englishPattern fallback Lua pattern (e.g. new Forever seals)
--- English fallbacks only ever match on English clients.
+--                       (these only ever match on English clients)
+--   opts.sharedPrefix   also match spells whose name starts the way the listed
+--                       spells' names do, in the client's language: "Teleport: "
+--                       covers teleports to places Prepped has no ID for
 local families = {}
 
 function API.SpellFamily(label, ids, opts)
@@ -79,22 +81,60 @@ function API.SpellFamily(label, ids, opts)
         class = opts.class,
         isAura = opts.aura == true,
         englishNames = opts.englishNames,
-        englishPattern = opts.englishPattern,
+        sharedPrefix = opts.sharedPrefix == true,
     }
     for _, id in ipairs(ids) do family.idSet[id] = true end
     families[#families + 1] = family
     return family
 end
 
+-- Separators a shared prefix ends with: ":" and the full-width "：" (Asian clients).
+local PREFIX_SEPARATORS = { ":", "\239\188\154" }
+
+-- What all the names share, cut back to its last separator and the spaces
+-- after it: "Teleport: " from "Teleport: Stormwind" and "Teleport: Ironforge".
+-- nil when they share no separator.
+local function SharedPrefix(names)
+    local prefix
+    for _, name in ipairs(names) do
+        if not prefix then
+            prefix = name
+        else
+            local length = 0
+            while length < #prefix and prefix:byte(length + 1) == name:byte(length + 1) do length = length + 1 end
+            prefix = prefix:sub(1, length)
+        end
+    end
+    if not prefix then return nil end
+    local cut
+    for _, separator in ipairs(PREFIX_SEPARATORS) do
+        local from = 1
+        while true do
+            local _, last = prefix:find(separator, from, true)
+            if not last then break end
+            if not cut or last > cut then cut = last end
+            from = last + 1
+        end
+    end
+    if not cut or cut < 3 then return nil end
+    return prefix:sub(1, cut) .. (prefix:sub(cut + 1):match("^%s*") or "")
+end
+
 local function GetFamilyNames(family)
     if family.names then return family.names end
-    local names = {}
+    local names, resolved = {}, {}
     for _, id in ipairs(family.ids) do
         local name = C_Spell.GetSpellName(id)
-        if name then names[name] = true end
+        if name then
+            if not names[name] then resolved[#resolved + 1] = name end
+            names[name] = true
+        end
     end
     for _, name in ipairs(family.englishNames or {}) do names[name] = true end
-    if next(names) ~= nil then family.names = names end -- retry later if nothing resolved yet
+    if next(names) ~= nil then -- retry later if nothing resolved yet
+        family.names = names
+        if family.sharedPrefix then family.prefix = SharedPrefix(resolved) end
+    end
     return names
 end
 
@@ -102,7 +142,8 @@ function API.FamilyMatches(family, name, spellId)
     if spellId ~= nil and family.idSet[spellId] then return true end
     if name ~= nil then
         if GetFamilyNames(family)[name] then return true end
-        if family.englishPattern and name:find(family.englishPattern) then return true end
+        local prefix = family.prefix
+        if prefix and name:sub(1, #prefix) == prefix then return true end
     end
     return false
 end
@@ -197,6 +238,20 @@ function API.KnowsSpell(spellID)
     return spellIDSet[spellID] == true or C_SpellBook.IsSpellKnown(spellID)
 end
 
+-- True if a learned spell has this (localized) name.
+function API.KnowsSpellName(name)
+    return name ~= nil and GetSpellCache()[name] ~= nil
+end
+
+-- The last spell of the list you know. Lists go from rank 1 up, so this is
+-- the highest rank (which matters for spells whose ranks have their own names).
+function API.BestKnownSpell(ids)
+    for i = #ids, 1, -1 do
+        if API.KnowsSpell(ids[i]) then return ids[i] end
+    end
+    return nil
+end
+
 -- For spells whose reagent depends on the rank you know.
 --   options: { { spells = { spellID, ... }, item = itemID, name = "Reagent" }, ... }, best first
 -- Returns the first option with a learned spell, or nil.
@@ -209,17 +264,17 @@ function API.PickByKnownSpell(options)
     return nil
 end
 
--- Count and name of the reagent for the best learned option, and the option. If
--- the spell is learned under an ID that isn't listed, every listed reagent
--- counts (name and option nil).
+-- Count of the reagent for the best learned option, and the option. If the
+-- spell is learned under an ID that isn't listed, every listed reagent counts
+-- (option nil).
 function API.CountReagentForKnownSpell(options)
     local option = API.PickByKnownSpell(options)
     if option then
-        return C_Item.GetItemCount(option.item), option.name, option
+        return C_Item.GetItemCount(option.item), option
     end
     local total = 0
     for _, entry in ipairs(options) do total = total + C_Item.GetItemCount(entry.item) end
-    return total, nil, nil
+    return total, nil
 end
 
 -- predicate(spellName, spellID) -> bool. Returns the matching learned spell IDs.
@@ -245,6 +300,11 @@ function API.GetKnownFamilyIDs(family)
         family.knownIDsGeneration = spellCacheGeneration
     end
     return family.knownIDs
+end
+
+-- The family's best learned spell: the highest listed rank, else one matched by name.
+function API.BestKnownFamilySpell(family)
+    return API.BestKnownSpell(family.ids) or API.GetKnownFamilyIDs(family)[1]
 end
 
 ------------------------------------------------------------------------
@@ -340,9 +400,9 @@ end
 -- Looks for a helpful aura on the player.
 --   matcher(name, spellId) -> bool. Only called with readable (non-secret) values.
 -- Returns one of:
---   "present", secondsLeft  (secondsLeft is nil for buffs without a known expiry)
+--   "present", secondsLeft, spellId, name   (secondsLeft is nil for buffs without a known expiry)
 --   "missing"
---   "unknown"               (buff data is hidden right now; don't warn)
+--   "unknown"                               (buff data is hidden right now; don't warn)
 function API.FindPlayerBuff(matcher)
     -- While buff data is hidden (in combat), Forever refuses add-on aura scans
     -- outright ("Auras cannot be accessed when secret"): don't even try.
@@ -356,10 +416,7 @@ function API.FindPlayerBuff(matcher)
         local entry = auraEntries[i]
         if matcher(entry.name, entry.spellId) then
             local expirationTime = entry.expirationTime
-            if expirationTime then
-                return "present", expirationTime - GetTime()
-            end
-            return "present", nil
+            return "present", expirationTime and (expirationTime - GetTime()) or nil, entry.spellId, entry.name
         end
     end
     if auraSawSecret and not MissingIsReliable(matcher) then
@@ -391,6 +448,7 @@ local ENCHANT_IMBUE = (Enum.ItemEnchantType and Enum.ItemEnchantType.Imbue) or 3
 local ITEM_CLASS_WEAPON = (Enum.ItemClass and Enum.ItemClass.Weapon) or 2
 local MAIN_HAND_SLOT = INVSLOT_MAINHAND or 16
 local OFF_HAND_SLOT = INVSLOT_OFFHAND or 17
+API.MAIN_HAND_SLOT, API.OFF_HAND_SLOT = MAIN_HAND_SLOT, OFF_HAND_SLOT
 
 local ENCHANT_TYPE_LABELS = { [0] = "none", [1] = "permanent", [2] = "temporary", [3] = "imbue" }
 
@@ -435,6 +493,17 @@ function API.IsOffHandWeapon()
     return classID == ITEM_CLASS_WEAPON
 end
 
+-- Imbues on your weapons: whether the main hand and (offHandToo, when it holds
+-- a weapon) the off hand lack one, and the seconds left on the first imbue to
+-- run out (nil when none has a known expiry).
+function API.GetWeaponImbueState(offHandToo)
+    local hasMH, mhMs, hasOH, ohMs = API.GetWeaponImbues()
+    local checkOffHand = offHandToo and API.IsOffHandWeapon()
+    local msLeft = hasMH and mhMs or nil
+    if checkOffHand and hasOH and ohMs and (msLeft == nil or ohMs < msLeft) then msLeft = ohMs end
+    return not hasMH, (checkOffHand and not hasOH) == true, msLeft and msLeft / 1000 or nil
+end
+
 ------------------------------------------------------------------------
 -- Character state
 ------------------------------------------------------------------------
@@ -454,6 +523,34 @@ function API.IsTraveling()
     if IsMounted() then return true end
     local formID = GetShapeshiftFormID()
     return formID ~= nil and TRAVEL_FORMS[formID] == true
+end
+
+-- In a party or raid inside a dungeon or raid instance, where a tank does the tanking.
+function API.InGroupInstance()
+    if not IsInGroup() then return false end
+    local inInstance, instanceType = IsInInstance()
+    return inInstance == true and (instanceType == "party" or instanceType == "raid")
+end
+
+-- In a raid group (home or instance).
+function API.IsInRaidGroup()
+    return IsInRaid() == true or (LE_PARTY_CATEGORY_INSTANCE ~= nil and IsInRaid(LE_PARTY_CATEGORY_INSTANCE) == true)
+end
+
+-- Average durability of your equipped gear in percent (100 without breakable
+-- items), and the equipped item in the worst shape: its slot and percent.
+function API.GetDurability()
+    local totalCurrent, totalMax, worstSlot, worstPercent = 0, 0, nil, nil
+    for slot = 1, 19 do
+        local current, max = GetInventoryItemDurability(slot)
+        if current and max and max > 0 then
+            totalCurrent, totalMax = totalCurrent + current, totalMax + max
+            local percent = current / max * 100
+            if not worstPercent or percent < worstPercent then worstSlot, worstPercent = slot, percent end
+        end
+    end
+    if totalMax == 0 then return 100, nil, nil end
+    return totalCurrent / totalMax * 100, worstSlot, worstPercent
 end
 
 ------------------------------------------------------------------------
@@ -482,7 +579,7 @@ function API.SendGroupMessage(message)
 end
 
 ------------------------------------------------------------------------
--- Items and bags (bag-derived counts are cached until the bags change)
+-- Items and bags
 ------------------------------------------------------------------------
 -- Total count of the given items in your bags.
 function API.CountItems(itemIDs)
@@ -504,29 +601,98 @@ function API.NumBags()
     return NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
 end
 
--- Bumped on every bag change; modules cache bag scans per generation.
+-- Bumped on every bag change; the bag index below is rebuilt on the next read.
 local bagGeneration = 0
 function API.GetBagGeneration()
     return bagGeneration
 end
 
-local itemDataPending = false -- the last bag scan met an item whose data hadn't loaded
+local itemDataPending = false -- something met an item whose data hadn't loaded yet
 
--- Calls fn(itemID, stackCount) for every item in your bags.
-function API.ForEachBagItem(fn)
+-- One scan of the bags serves everything that looks at them (water, food, pet
+-- food, buff food, poisons, ...): per item ID its total count and where its
+-- first stack is. Rebuilt once per change of the bags, and once a minute as a
+-- safety net. Derived counts are cached per build (bagIndexBuild).
+local BAG_INDEX_TTL = 60
+local bagIndex, bagOrder, entryPool = {}, {}, {}
+local bagIndexGeneration, bagIndexTime, bagIndexBuild = nil, 0, 0
+
+function API.GetBagIndex()
+    local now = GetTime()
+    if bagIndexGeneration == bagGeneration and (now - bagIndexTime) < BAG_INDEX_TTL then
+        return bagIndex, bagOrder
+    end
+    for itemID, entry in pairs(bagIndex) do
+        entryPool[#entryPool + 1] = entry
+        bagIndex[itemID] = nil
+    end
+    Wipe(bagOrder)
     for bag = 0, API.NumBags() do
         for slot = 1, C_Container.GetContainerNumSlots(bag) do
             local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID then
-                if C_Item.GetItemInfo(info.itemID) == nil then itemDataPending = true end -- also requests it
-                fn(info.itemID, info.stackCount or 1)
+            local itemID = info and info.itemID
+            if itemID then
+                if C_Item.GetItemInfo(itemID) == nil then itemDataPending = true end -- also requests it
+                local entry = bagIndex[itemID]
+                if entry then
+                    entry.count = entry.count + (info.stackCount or 1)
+                else
+                    entry = table.remove(entryPool) or {}
+                    entry.count, entry.bag, entry.slot = info.stackCount or 1, bag, slot
+                    bagIndex[itemID] = entry
+                    bagOrder[#bagOrder + 1] = itemID
+                end
             end
         end
     end
+    bagIndexGeneration, bagIndexTime, bagIndexBuild = bagGeneration, now, bagIndexBuild + 1
+    return bagIndex, bagOrder
 end
 
--- GET_ITEM_INFO_RECEIVED: rescan the bags only if the last scan met an item whose
--- data was still loading (early after login). Returns false when nothing changed.
+-- Calls fn(itemID, count, bag, slot) once per item in your bags (count: all its
+-- stacks; bag, slot: its first stack).
+function API.ForEachBagItem(fn)
+    local index, order = API.GetBagIndex()
+    for _, itemID in ipairs(order) do
+        local entry = index[itemID]
+        fn(itemID, entry.count, entry.bag, entry.slot)
+    end
+end
+
+-- Where the first stack of an item is: bag, slot (nil when it isn't in your bags).
+function API.FindBagItem(itemID)
+    local entry = API.GetBagIndex()[itemID]
+    if entry then return entry.bag, entry.slot end
+    return nil
+end
+
+local bagCounts = {} -- [key] = { build =, count =, bag =, slot =, itemID = }
+
+-- How many items in your bags predicate(itemID) is true for, and where the first
+-- of them is: count, bag, slot, itemID. Cached per bag scan under key, so the
+-- predicate must only depend on the item (and on what invalidates the bags).
+function API.CountBagItemsWhere(key, predicate)
+    local index, order = API.GetBagIndex()
+    local cached = bagCounts[key]
+    if cached and cached.build == bagIndexBuild then
+        return cached.count, cached.bag, cached.slot, cached.itemID
+    end
+    local count, firstBag, firstSlot, firstItem = 0, nil, nil, nil
+    for _, itemID in ipairs(order) do
+        if predicate(itemID) then
+            local entry = index[itemID]
+            count = count + entry.count
+            if not firstItem then firstBag, firstSlot, firstItem = entry.bag, entry.slot, itemID end
+        end
+    end
+    cached = cached or {}
+    cached.build, cached.count, cached.bag, cached.slot, cached.itemID = bagIndexBuild, count, firstBag, firstSlot, firstItem
+    bagCounts[key] = cached
+    return count, firstBag, firstSlot, firstItem
+end
+
+-- GET_ITEM_INFO_RECEIVED: look again only if something met an item whose data
+-- was still loading (early after login). Returns false when nothing changed.
 function API.OnItemInfoReceived()
     if not itemDataPending then return false end
     itemDataPending = false
@@ -547,21 +713,69 @@ function API.CountFreeBagSlots()
     return free
 end
 
-local DRINK = API.SpellFamily("Drink", { 430, 431, 432, 1133, 1135, 1137 }, { englishNames = { "Drink" } })
-local drinkItems = {} -- [itemID] = bool, once the item's data has loaded
+local requestedItems = {} -- items whose data was asked for once already
 
--- True for drinks (water): their use effect is the "Drink" spell.
-function API.IsDrinkItem(itemID)
-    local known = drinkItems[itemID]
+-- The item's name in the client's language. Until its data has loaded, the
+-- fallback; the name is then shown on the next check after it arrives.
+function API.GetItemName(itemID, fallback)
+    local name = (C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID)) or C_Item.GetItemInfo(itemID)
+    if name then return name end
+    if not requestedItems[itemID] then
+        requestedItems[itemID] = true
+        itemDataPending = true
+        if C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
+    end
+    return fallback or ("item " .. itemID)
+end
+
+-- Icons (texture file IDs) straight from the client's data; no loading needed.
+function API.GetItemIcon(itemID)
+    local _, _, _, _, icon = C_Item.GetItemInfoInstant(itemID)
+    return icon
+end
+
+function API.GetSpellIcon(spellID)
+    if not (spellID and C_Spell.GetSpellTexture) then return nil end
+    return (C_Spell.GetSpellTexture(spellID))
+end
+
+-- What using an item does, from its use effect: drinks (water) use the "Drink"
+-- spell and food the "Food" spell, in any client language.
+local DRINK = API.SpellFamily("Drink", { 430, 431, 432, 1133, 1135, 1137 }, { englishNames = { "Drink" } })
+local FOOD = API.SpellFamily("Food", { 433, 434, 435, 1127, 1129, 1131 }, { englishNames = { "Food" } })
+local useKinds = {} -- [itemID] = "drink", "food" or false, once the item's data has loaded
+
+local function ItemUseKind(itemID)
+    local known = useKinds[itemID]
     if known ~= nil then return known end
     local spellName, spellID = C_Item.GetItemSpell(itemID)
-    local isDrink = (spellName ~= nil or spellID ~= nil) and API.FamilyMatches(DRINK, spellName, spellID)
+    local kind = false
+    if spellName ~= nil or spellID ~= nil then
+        if API.FamilyMatches(DRINK, spellName, spellID) then
+            kind = "drink"
+        elseif API.FamilyMatches(FOOD, spellName, spellID) then
+            kind = "food"
+        end
+    end
     -- Before the item's data has loaded GetItemSpell can come back empty, so a
     -- "no" is only remembered for items the client knows.
-    if isDrink or C_Item.GetItemInfo(itemID) ~= nil then
-        drinkItems[itemID] = isDrink
+    if kind or C_Item.GetItemInfo(itemID) ~= nil then
+        useKinds[itemID] = kind
     end
-    return isDrink
+    return kind
+end
+
+function API.IsDrinkItem(itemID) return ItemUseKind(itemID) == "drink" end
+function API.IsFoodItem(itemID) return ItemUseKind(itemID) == "food" end
+
+-- Bandages: consumables of the Bandage subclass.
+local ITEM_CLASS_CONSUMABLE = (Enum.ItemClass and Enum.ItemClass.Consumable) or 0
+local CONSUMABLE_BANDAGE = (Enum.ItemConsumableSubclass and Enum.ItemConsumableSubclass.Bandage) or 7
+local CONSUMABLE_FOOD_AND_DRINK = 5 -- item subclass
+
+function API.IsBandage(itemID)
+    local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
+    return classID == ITEM_CLASS_CONSUMABLE and subClassID == CONSUMABLE_BANDAGE
 end
 
 ------------------------------------------------------------------------
@@ -582,11 +796,8 @@ API.WELL_FED = WELL_FED
 -- relied on where it is seen to work: the tooltip of a food known to give the
 -- buff has to name it too. On a client where it doesn't (another wording, no
 -- tooltip data), any food counts instead.
-local ITEM_CLASS_CONSUMABLE = (Enum.ItemClass and Enum.ItemClass.Consumable) or 0
-local CONSUMABLE_FOOD_AND_DRINK = 5      -- item subclass
 local BUFF_FOOD_SAMPLES = { 2680, 6888 } -- Spiced Wolf Meat, Herb Baked Egg
 local SAMPLE_WAIT_SECONDS = 10           -- how long the samples' item data may take to load
-local BUFF_FOOD_SCAN_TTL = 60            -- safety net; bag changes invalidate the scan
 
 local function IsFoodOrDrink(itemID)
     local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
@@ -659,7 +870,7 @@ local function IsBuffFood(itemID, byTooltip)
     if buffFoodItems[itemID] then return true end
     if not IsFoodOrDrink(itemID) then return false end
     if not byTooltip then return not API.IsDrinkItem(itemID) end -- can't tell: any food counts
-    if plainFoodScan[itemID] == foodScan then return false end   -- another stack of it
+    if plainFoodScan[itemID] == foodScan then return false end   -- read in this scan already
     local tooltip = ReadItemTooltip(itemID)
     if tooltip and NamesFoodBuff(tooltip) then
         buffFoodItems[itemID] = true
@@ -670,41 +881,43 @@ local function IsBuffFood(itemID, byTooltip)
     return false
 end
 
-local buffFoodFound, buffFoodGeneration, buffFoodScanTime = false, nil, 0
-local scanByTooltip
+local buffFood = { build = nil } -- the first buff food in your bags, per bag scan
 
-local function NoteBuffFood(itemID)
-    if not buffFoodFound and IsBuffFood(itemID, scanByTooltip) then buffFoodFound = true end
+-- The first food in your bags that gives a food buff: itemID, bag, slot (nil
+-- without). Looked for once per bag scan; while Prepped can't tell yet (item
+-- data loading after login), it looks again on the next call.
+function API.GetBuffFood()
+    local index, order = API.GetBagIndex()
+    if buffFood.build == bagIndexBuild then
+        return buffFood.itemID, buffFood.bag, buffFood.slot
+    end
+    local byTooltip = TooltipsNameFoodBuff()
+    if byTooltip == nil then return nil end
+    foodScan = foodScan + 1
+    buffFood.itemID, buffFood.bag, buffFood.slot = nil, nil, nil
+    for _, itemID in ipairs(order) do
+        if IsBuffFood(itemID, byTooltip) then
+            local entry = index[itemID]
+            buffFood.itemID, buffFood.bag, buffFood.slot = itemID, entry.bag, entry.slot
+            break
+        end
+    end
+    buffFood.build = bagIndexBuild
+    return buffFood.itemID, buffFood.bag, buffFood.slot
 end
 
--- True when your bags hold food that gives a food buff. Scanned once per change
--- of the bags (and once a minute, as a safety net).
 function API.HasBuffFood()
-    local now = GetTime()
-    if buffFoodGeneration == bagGeneration and (now - buffFoodScanTime) < BUFF_FOOD_SCAN_TTL then
-        return buffFoodFound
-    end
-    buffFoodFound, buffFoodGeneration, buffFoodScanTime = false, bagGeneration, now
-    scanByTooltip = TooltipsNameFoodBuff()
-    if scanByTooltip == nil then
-        -- Can't tell yet (early login): look again soon instead of caching "no food".
-        buffFoodScanTime = now - BUFF_FOOD_SCAN_TTL + 1
-    else
-        foodScan = foodScan + 1
-        API.ForEachBagItem(NoteBuffFood)
-    end
-    return buffFoodFound
+    return API.GetBuffFood() ~= nil
 end
 
 -- For /prepped debug: "Name id" per food and drink in your bags, with "(food buff)"
 -- behind what counts as buff food, and whether food tooltips name the buff here.
 function API.DescribeBagFood()
     local byTooltip = TooltipsNameFoodBuff()
-    local list, seen = {}, {}
+    local list = {}
     foodScan = foodScan + 1
     API.ForEachBagItem(function(itemID)
-        if seen[itemID] or not IsFoodOrDrink(itemID) then return end
-        seen[itemID] = true
+        if not IsFoodOrDrink(itemID) then return end
         local isBuffFood = byTooltip ~= nil and IsBuffFood(itemID, byTooltip)
         list[#list + 1] = string.format("%s %d%s", C_Item.GetItemInfo(itemID) or "?", itemID, isBuffFood and " (food buff)" or "")
     end)
@@ -713,7 +926,7 @@ function API.DescribeBagFood()
 end
 
 ------------------------------------------------------------------------
--- Hunter pets (C_PetInfo, with the classic globals as a fallback)
+-- Pets (C_PetInfo, with the classic globals as a fallback)
 ------------------------------------------------------------------------
 local function PetInfoFunction(name)
     return (C_PetInfo and C_PetInfo[name]) or _G[name]
@@ -740,6 +953,47 @@ function API.CanPetEatItem(itemID)
     if not fn then return false end
     local ok, canEat = pcall(fn, itemID)
     return ok and canEat == true
+end
+
+-- One pet action bar slot: name, autoCastEnabled, spellID. Handles the modern
+-- return values (name, texture, isToken, isActive, autoCastAllowed,
+-- autoCastEnabled, spellID) and the classic ones, which have a subtext second.
+local function ReadPetAction(index)
+    local ok, name, second, third, fourth, fifth, sixth, seventh = pcall(GetPetActionInfo, index)
+    if not ok or name == nil or IsSecret(name) then return nil end
+    local isToken, autoCastEnabled, spellID
+    if type(third) == "boolean" then
+        isToken, autoCastEnabled, spellID = third, sixth, seventh
+    else
+        isToken, autoCastEnabled = fourth, seventh
+    end
+    if isToken or IsSecret(autoCastEnabled) then return nil end
+    if IsSecret(spellID) or type(spellID) ~= "number" then spellID = nil end
+    return name, autoCastEnabled == true, spellID
+end
+
+-- The pet ability matching matcher(name, spellID) that is on autocast: its
+-- name, or nil when there is none (or no pet action bar).
+function API.FindAutocastPetAction(matcher)
+    if not GetPetActionInfo then return nil end
+    for index = 1, (NUM_PET_ACTION_SLOTS or 10) do
+        local name, autoCast, spellID = ReadPetAction(index)
+        if name and autoCast and matcher(name, spellID) then return name, spellID end
+    end
+    return nil
+end
+
+-- "Name (autocast)" per ability on the pet bar, for /prepped debug.
+function API.ListPetActions()
+    if not GetPetActionInfo then return nil end
+    local list = {}
+    for index = 1, (NUM_PET_ACTION_SLOTS or 10) do
+        local name, autoCast, spellID = ReadPetAction(index)
+        if name then
+            list[#list + 1] = string.format("%s %s%s", name, tostring(spellID), autoCast and " (autocast)" or "")
+        end
+    end
+    return list
 end
 
 ------------------------------------------------------------------------
