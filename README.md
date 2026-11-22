@@ -202,3 +202,9 @@ lua5.1 tests/run.lua
 ```
 
 The `tests/` folder isn't included in the release zip.
+
+---
+
+## License
+
+Prepped is released under the [MIT License](LICENSE).
