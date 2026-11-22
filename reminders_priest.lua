@@ -1,10 +1,10 @@
 -- reminders_priest.lua
--- Priest-specific reminders for the Prepped addon
+-- Priest reminders: Power Word: Fortitude, Inner Fire and candles.
 
 local _, ns = ...
-local API = ns.API
-
-local PriestReminders = { class = "PRIEST" }
+local API, L, Action = ns.API, ns.L, ns.Action
+local Prepped = ns.Prepped
+local format = string.format
 
 local FORTITUDE = API.SpellFamily("Power Word: Fortitude", { 1243, 1244, 1245, 2791, 10937, 10938 }, { class = "PRIEST", aura = true })
 local PRAYER_OF_FORTITUDE = API.SpellFamily("Prayer of Fortitude", { 21562, 21564 }, { class = "PRIEST", aura = true })
@@ -18,59 +18,62 @@ local IsInnerFire = API.Matcher(INNER_FIRE)
 -- Prayer of Fortitude rank 1 uses Holy Candles; rank 2, Prayer of Spirit and
 -- Prayer of Shadow Protection use Sacred Candles.
 local CANDLES = {
-    { spells = { 21564, 27681, 27683 }, item = 17029, name = "Sacred Candles" },
-    { spells = { 21562 }, item = 17028, name = "Holy Candles" },
+    { spells = { 21564, 27681, 27683 }, item = 17029, name = "Sacred Candle" },
+    { spells = { 21562 }, item = 17028, name = "Holy Candle" },
 }
 
-local priestReminders = {
-    {
-        id = "priest_fortitude",
-        message = "Missing Power Word: Fortitude!",
-        messageLow = "Fortitude expiring (%ss left)",
-        mustNotRest = true,
-        noTravel = true,
+-- The spell clicking casts: Power Word: Fortitude (no reagent), else Prayer of Fortitude.
+local function FortitudeSpell()
+    return API.BestKnownFamilySpell(FORTITUDE) or API.BestKnownFamilySpell(PRAYER_OF_FORTITUDE)
+end
+
+Prepped:RegisterModule({
+    class = "PRIEST",
+    group = "Priest",
+    reminders = {
+        {
+            id = "priest_fortitude", label = L["Missing Power Word: Fortitude"], hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 },
+            description = L["Reminds you to keep Power Word: Fortitude (or Prayer of Fortitude) on yourself."],
+            adventuring = true, noTravel = true,
+            check = function(rule)
+                local spellID = FortitudeSpell()
+                if not spellID then return nil end
+                return Prepped:CheckTimedBuff(rule, IsFortitudeBuff, C_Spell.GetSpellName(spellID)), nil, API.GetSpellIcon(spellID)
+            end,
+            action = function() return Action.Cast(FortitudeSpell(), true) end,
+        },
+        {
+            id = "priest_inner_fire", label = L["Missing Inner Fire"], hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 },
+            description = L["Reminds you to have Inner Fire up when not resting."],
+            adventuring = true, noTravel = true,
+            check = function(rule)
+                local spellID = API.BestKnownFamilySpell(INNER_FIRE)
+                if not spellID then return nil end
+                return Prepped:CheckTimedBuff(rule, IsInnerFire, C_Spell.GetSpellName(spellID)), nil, API.GetSpellIcon(spellID)
+            end,
+            action = function() return Action.Cast(API.BestKnownFamilySpell(INNER_FIRE)) end,
+        },
+        {
+            -- Vendor reagent: hidden when not needed (Legacy perk "Reagent Economy", ...)
+            id = "priest_candles", label = L["Low Candles"], defaultThreshold = 10, unit = "count", range = { 0, 100, 5 },
+            description = L["While resting, warns when you have fewer candles than this for your Prayer spells: Sacred Candles once you know Prayer of Fortitude rank 2, Prayer of Spirit or Prayer of Shadow Protection, Holy Candles before that."],
+            announce = { L["low on {name} ({count} left)"], L["buy more {name}"] },
+            supply = true,
+            check = function(rule)
+                if API.HasReagentEconomy() then return nil end
+                if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(PRAYER_OF_SPIRIT)
+                    or API.KnowsFamily(PRAYER_OF_SHADOW_PROTECTION)) then
+                    return nil
+                end
+                local count, option = API.CountReagentForKnownSpell(CANDLES)
+                if option and not API.ReagentNeeded(option.item, option.spells, true) then return nil end
+                if count >= Prepped:GetRuleThreshold(rule.id) then return nil end
+                local name = option and API.GetItemName(option.item, option.name) or L["candles"]
+                local value = rule.value or {}
+                rule.value = value
+                value.count, value.name = count, name
+                return format(L["Buy %s (%d left)"], name, count), value, API.GetItemIcon(option and option.item or CANDLES[2].item)
+            end,
+        },
     },
-    {
-        id = "priest_inner_fire",
-        message = "Missing Inner Fire!",
-        messageLow = "Inner Fire expiring (%ss left)",
-        mustNotRest = true,
-        noTravel = true,
-    },
-    { id = "priest_candles", mustRest = true },
-}
-
-local checks = {}
-
-function checks.priest_fortitude(config)
-    if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(FORTITUDE)) then return nil end
-    return Prepped:CheckTimedBuff(config.id, IsFortitudeBuff, config.message, config.messageLow)
-end
-
-function checks.priest_inner_fire(config)
-    if not API.KnowsFamily(INNER_FIRE) then return nil end
-    return Prepped:CheckTimedBuff(config.id, IsInnerFire, config.message, config.messageLow)
-end
-
--- Vendor reagent: hidden when not needed (Legacy perk "Reagent Economy", ...)
-function checks.priest_candles(config)
-    if API.HasReagentEconomy() then return nil end
-    if not (API.KnowsFamily(PRAYER_OF_FORTITUDE) or API.KnowsFamily(PRAYER_OF_SPIRIT)
-        or API.KnowsFamily(PRAYER_OF_SHADOW_PROTECTION)) then
-        return nil
-    end
-    local count, name, option = API.CountReagentForKnownSpell(CANDLES)
-    if option and not API.ReagentNeeded(option.item, option.spells, true) then return nil end
-    if count < Prepped:GetRuleThreshold(config.id) then
-        return string.format("Low on %s (%d left)", name or "candles", count), { name = name or "candles", count = count }
-    end
-    return nil
-end
-
-function PriestReminders.CheckReminders()
-    Prepped:RunReminders(priestReminders, checks)
-end
-
-if Prepped then
-    Prepped:RegisterReminderModule(PriestReminders)
-end
+})

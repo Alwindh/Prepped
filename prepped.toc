@@ -1,17 +1,29 @@
 ## Interface: 16001
 ## Title: Prepped
-## Notes: Simple reminders for chores (Reagents, buffs, repairs)
+## Notes: Simple reminders for chores (reagents, buffs, repairs)
+## Notes-deDE: Einfache Erinnerungen an Pflichten (Reagenzien, Buffs, Reparaturen)
+## Notes-frFR: Rappels simples pour les corvées (composants, améliorations, réparations)
+## Notes-esES: Recordatorios sencillos para las tareas (componentes, beneficios, reparaciones)
+## Notes-esMX: Recordatorios sencillos para las tareas (componentes, beneficios, reparaciones)
 ## Author: Excessive
-## Version: 2.6.0
+## Version: 3.0.0
 ## IconTexture: Interface\Icons\INV_Misc_Bag_08
 ## Category: Reminders
 ## AddonCompartmentFunc: Prepped_OpenOptions
+## AddonCompartmentFuncOnEnter: Prepped_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: Prepped_OnCompartmentLeave
 
 ## SavedVariables: PreppedSettings
 
-prepped.lua
+locale.lua
+locale_deDE.lua
+locale_frFR.lua
+locale_esES.lua
 api.lua
-reminders_core.lua
+core.lua
+display.lua
+supplies.lua
+commands.lua
 options.lua
 reminders_general.lua
 reminders_multiclass.lua

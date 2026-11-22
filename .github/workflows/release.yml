@@ -28,8 +28,9 @@ jobs:
       - name: Package Addon
         run: |
           mkdir Prepped
-          # Copy all relevant addon files into the folder
+          # Copy all relevant addon files into the folder (not tests/)
           cp *.lua *.toc Prepped/
+          if [ -f LICENSE ]; then cp LICENSE Prepped/; fi
           zip -r Prepped.zip Prepped/
 
       - name: Create Release

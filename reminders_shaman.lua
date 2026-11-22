@@ -1,17 +1,31 @@
--- Shaman-specific reminders module
-local _, ns = ...
-local API = ns.API
+-- reminders_shaman.lua
+-- Shaman reminders: totem items, Lightning or Water Shield, weapon imbues and reagents.
 
-local ShamanReminders = { class = "SHAMAN" }
+local _, ns = ...
+local API, L, Action = ns.API, ns.L, ns.Action
+local Prepped = ns.Prepped
+local format = string.format
 
 -- Water Shield is new in Forever and its spell ID isn't known yet, so it is
 -- recognised by its English name (English clients only) until it's listed here.
-local SHIELDS = API.SpellFamily("Shields", {
-    324, 325, 905, 945, 8134, 10431, 10432, -- Lightning Shield
-}, { class = "SHAMAN", aura = true, englishNames = { "Water Shield" } })
+local LIGHTNING_SHIELD = { 324, 325, 905, 945, 8134, 10431, 10432 }
+local SHIELDS = API.SpellFamily("Shields", LIGHTNING_SHIELD, { class = "SHAMAN", aura = true, englishNames = { "Water Shield" } })
 local REINCARNATION = API.SpellFamily("Reincarnation", { 20608 }, { class = "SHAMAN" })
 local WATER_WALKING = API.SpellFamily("Water Walking", { 546 }, { class = "SHAMAN" })
 local WATER_BREATHING = API.SpellFamily("Water Breathing", { 131 }, { class = "SHAMAN" })
+
+-- Weapon imbues; clicking casts the first you know of Windfury, Rockbiter,
+-- Flametongue and Frostbrand Weapon.
+local ROCKBITER = { 8017, 8018, 8019, 10399, 16314, 16315, 16316 }
+local FLAMETONGUE = { 8024, 8027, 8030, 16339, 16341, 16342 }
+local FROSTBRAND = { 8033, 8038, 10456, 16355, 16356 }
+local WINDFURY = { 8232, 8235, 10486, 16362 }
+local IMBUE_CHOICE = { WINDFURY, ROCKBITER, FLAMETONGUE, FROSTBRAND }
+local ALL_IMBUES = {}
+for _, list in ipairs(IMBUE_CHOICE) do
+    for _, id in ipairs(list) do ALL_IMBUES[#ALL_IMBUES + 1] = id end
+end
+API.SpellFamily("Weapon imbues", ALL_IMBUES, { class = "SHAMAN" }) -- listed for /prepped debug
 
 local IsShield = API.Matcher(SHIELDS)
 
@@ -50,12 +64,6 @@ local TOTEM_ELEMENTS = {
     }, { class = "SHAMAN" }) },
 }
 
--- "Fire Totem", "Fire Totem and Air Totem", "Earth Totem, Fire Totem and Air Totem"
-local function JoinNames(names)
-    if #names <= 1 then return names[1] or "" end
-    return table.concat(names, ", ", 1, #names - 1) .. " and " .. names[#names]
-end
-
 -- Talent tree order
 local TREE_ELEMENTAL = 1
 local TREE_RESTORATION = 3
@@ -67,66 +75,90 @@ local function IsEnhancementOrLeveling()
     return primaryTree ~= TREE_ELEMENTAL and primaryTree ~= TREE_RESTORATION
 end
 
-local shamanReminders = {
-    { id = "shaman_totems", outOfCombat = true },
-    {
-        id = "shaman_shield_buff",
-        message = "Buff missing: Shield",
-        messageLow = "Shield expiring (%ss left)",
-        mustNotRest = true,
-        noTravel = true,
-    },
-    {
-        id = "shaman_weapon_buff",
-        message = "Buff missing: Weapon",
-        messageLow = "Weapon imbue expiring (%ss left)",
-        mustNotRest = true,
-        noTravel = true,
-    },
-    { id = "shaman_ankh", message = "Low on reagents: Ankh (%s left)", item = 17030, family = REINCARNATION, mustRest = true },
-    { id = "shaman_fish_oil", message = "Low on reagents: Fish Oil (%s left)", item = 17058, family = WATER_WALKING, mustRest = true },
-    { id = "shaman_fish_scales", message = "Low on reagents: Fish Scales (%s left)", item = 17057, family = WATER_BREATHING, mustRest = true },
-}
-
-local function CheckReagent(config) return Prepped:CheckReagent(config) end
-
-local checks = {
-    shaman_ankh = CheckReagent,
-    shaman_fish_oil = CheckReagent,
-    shaman_fish_scales = CheckReagent,
-}
-
--- The totem items you need (you know a totem of that element) but don't carry,
--- e.g. after leaving one in the bank.
-function checks.shaman_totems()
-    local missing
-    for _, element in ipairs(TOTEM_ELEMENTS) do
-        if API.KnowsFamily(element.family) and C_Item.GetItemCount(element.item) == 0 then
-            missing = missing or {}
-            missing[#missing + 1] = element.name
-        end
+local function ImbueSpell()
+    for _, list in ipairs(IMBUE_CHOICE) do
+        local spellID = API.BestKnownSpell(list)
+        if spellID then return spellID end
     end
-    if not missing then return nil end
-    local text = (#missing == 1 and "Missing item: " or "Missing items: ") .. table.concat(missing, ", ")
-    return text, { name = JoinNames(missing), count = #missing }
+    return nil
 end
 
-function checks.shaman_shield_buff(config)
-    if not API.KnowsFamily(SHIELDS) then return nil end
-    return Prepped:CheckTimedBuff(config.id, IsShield, config.message, config.messageLow)
-end
+local function CheckReagent(rule) return Prepped:CheckReagent(rule) end
 
--- Enhancement (or still leveling) only; both weapons when dual wielding. Only
--- imbues count, not sharpening stones or oils (Forever lets them stack).
-function checks.shaman_weapon_buff(config)
-    if not IsEnhancementOrLeveling() then return nil end
-    return Prepped:CheckWeaponImbue(config, true)
-end
-
-function ShamanReminders.CheckReminders()
-    Prepped:RunReminders(shamanReminders, checks)
-end
-
-if Prepped then
-    Prepped:RegisterReminderModule(ShamanReminders)
-end
+Prepped:RegisterModule({
+    class = "SHAMAN",
+    group = "Shaman",
+    reminders = {
+        {
+            -- The totem items you need (you know a totem of that element) but don't
+            -- carry, e.g. after leaving one in the bank.
+            id = "shaman_totems", label = L["Missing Totem Items"],
+            description = L["Out of combat, warns when the Earth, Fire, Water or Air Totem item for totems you know isn't in your bags (for example when it's still in the bank)."],
+            announce = { L["missing your {name}"], L["check your bank"] },
+            outOfCombat = true,
+            check = function(rule)
+                local missing, firstItem
+                for _, element in ipairs(TOTEM_ELEMENTS) do
+                    if API.KnowsFamily(element.family) and C_Item.GetItemCount(element.item) == 0 then
+                        missing = missing or {}
+                        missing[#missing + 1] = API.GetItemName(element.item, element.name)
+                        firstItem = firstItem or element.item
+                    end
+                end
+                if not missing then return nil end
+                local value = rule.value or {}
+                rule.value = value
+                value.name, value.count = ns.JoinList(missing), #missing
+                return format(L["Missing %s"], value.name), value, API.GetItemIcon(firstItem)
+            end,
+        },
+        {
+            -- Clicking casts the shield you had up last.
+            id = "shaman_shield_buff", label = L["Missing Shield Buff"], hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 },
+            description = L["Reminds you to keep Lightning Shield (or Water Shield) up. Clicking it casts the one you had up last."],
+            adventuring = true, noTravel = true,
+            family = SHIELDS, prefer = { LIGHTNING_SHIELD },
+            check = function(rule)
+                if not API.KnowsFamily(SHIELDS) then return nil end
+                local name, spellID = Prepped:ChooseSpell(rule)
+                return Prepped:CheckTimedBuff(rule, IsShield, name), nil, API.GetSpellIcon(spellID)
+            end,
+            action = function(rule) return Action.Cast(select(2, Prepped:ChooseSpell(rule))) end,
+        },
+        {
+            -- Enhancement (or still leveling) only; both weapons when dual wielding.
+            -- Only imbues count, not sharpening stones or oils (Forever lets them stack).
+            id = "shaman_weapon_buff", label = L["Missing Weapon Imbue"], hasLowWarningToggle = true, defaultThreshold = 60, range = { 0, 600, 10 },
+            description = L["Reminds Enhancement (and leveling) shamans to keep a weapon imbue up, on both weapons when dual wielding. Clicking it casts Windfury, Rockbiter, Flametongue or Frostbrand Weapon, the first you know."],
+            adventuring = true, noTravel = true,
+            icon = function() return API.GetSpellIcon(ImbueSpell()) end,
+            check = function(rule)
+                if not IsEnhancementOrLeveling() then return nil end
+                local state, first, second = Prepped:CheckWeaponImbue(rule, true)
+                if state == "expiring" then return format(L["%s expires in %s"], L["Weapon imbue"], ns.FormatDuration(first)) end
+                if state ~= "missing" then return nil end
+                return (first or not second) and L["Imbue your weapon"] or L["Imbue your off hand"]
+            end,
+            action = function() return Action.Cast(ImbueSpell()) end,
+        },
+        {
+            id = "shaman_ankh", label = L["Buy Ankhs"], defaultThreshold = 8, unit = "count", range = { 0, 40, 1 },
+            description = L["While resting, warns when you have fewer Ankhs than this (for Reincarnation)."],
+            announce = { L["low on Ankhs ({count} left)"], L["buy more Ankhs"] },
+            supply = true, item = 17030, itemName = "Ankh", family = REINCARNATION,
+            check = CheckReagent,
+        },
+        {
+            id = "shaman_fish_oil", label = L["Buy Fish Oil"], defaultThreshold = 10, unit = "count", range = { 0, 40, 1 },
+            description = L["While resting, warns when you have less Fish Oil than this (for Water Walking)."],
+            supply = true, item = 17058, itemName = "Fish Oil", family = WATER_WALKING,
+            check = CheckReagent,
+        },
+        {
+            id = "shaman_fish_scales", label = L["Buy Fish Scales"], defaultThreshold = 10, unit = "count", range = { 0, 40, 1 },
+            description = L["While resting, warns when you have fewer Fish Scales than this (for Water Breathing)."],
+            supply = true, item = 17057, itemName = "Shiny Fish Scales", family = WATER_BREATHING,
+            check = CheckReagent,
+        },
+    },
+})

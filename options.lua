@@ -4,14 +4,19 @@
 -- Every control is a proxy setting that reads and writes the active profile.
 
 local _, ns = ...
+local L, Prepped = ns.L, ns.Prepped
 
 local Options = {}
 ns.Options = Options
 
 local PREFIX = "PREPPED_"
-local CLASS_PAGES = { "Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior" }
+local CLASS_PAGES = {
+    { "Druid", "DRUID" }, { "Hunter", "HUNTER" }, { "Mage", "MAGE" }, { "Paladin", "PALADIN" }, { "Priest", "PRIEST" },
+    { "Rogue", "ROGUE" }, { "Shaman", "SHAMAN" }, { "Warlock", "WARLOCK" }, { "Warrior", "WARRIOR" },
+}
 
 local proxies = {}
+local added = {} -- rules that already have a control
 
 local function Proxy(category, key, varType, name, defaultValue, getValue, setValue)
     local setting = Settings.RegisterProxySetting(category, PREFIX .. key, varType, name, defaultValue, getValue, setValue)
@@ -30,15 +35,21 @@ local function Round(value)
     return math.floor(value + 0.5)
 end
 
-local UNIT_FORMATS = { count = "%d", seconds = "%ds", percent = "%d%%", level = "%d", minutes = "%d min" }
-local SLIDER_LABELS = { count = "Warn below", percent = "Warn below", level = "From level", minutes = "Minutes" }
+local UNIT_FORMATS = {
+    count = function(value) return string.format("%d", value) end,
+    seconds = function(value) return ns.FormatDuration(value) end,
+    percent = function(value) return string.format("%d%%", value) end,
+    level = function(value) return string.format("%d", value) end,
+    minutes = function(value) return string.format(L["%d min"], value) end,
+}
+local SLIDER_LABELS = { count = L["Warn below"], percent = L["Warn below"], level = L["From level"], minutes = L["Minutes"] }
 
 local function SliderOptions(rule, unit)
     local range = rule.range
     local options = Settings.CreateSliderOptions(range[1], range[2], range[3])
-    local format = UNIT_FORMATS[unit] or "%d"
+    local formatValue = UNIT_FORMATS[unit] or UNIT_FORMATS.count
     options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
-        return string.format(format, Round(value))
+        return formatValue(Round(value))
     end)
     return options
 end
@@ -57,9 +68,11 @@ local function ThresholdSetting(category, rule, key, name)
         end)
 end
 
--- One rule = a checkbox, a checkbox with a threshold slider, or a checkbox
--- with an indented "warn when expiring" row for buffs.
+-- One rule = a checkbox, a checkbox with a threshold slider, a plain slider, or
+-- a checkbox with an indented "warn when expiring" row for buffs.
 local function AddRule(category, layout, rule)
+    if not rule or added[rule.id] then return end
+    added[rule.id] = true
     local id = rule.id
 
     if rule.sliderOnly then
@@ -77,16 +90,16 @@ local function AddRule(category, layout, rule)
 
     if rule.hasLowWarningToggle then
         local enabledInitializer = Settings.CreateCheckbox(category, enabled, rule.description)
-        local warn = Proxy(category, id .. "_LOW", Settings.VarType.Boolean, "Warn when expiring", true,
+        local warn = Proxy(category, id .. "_LOW", Settings.VarType.Boolean, L["Warn when expiring"], true,
             function() return Prepped:IsLowEnabled(id) end,
             function(value)
                 Prepped:SetLowEnabled(id, value)
                 OnRuleChanged()
             end)
-        local seconds = ThresholdSetting(category, rule, "_SECONDS", "Seconds left")
+        local seconds = ThresholdSetting(category, rule, "_SECONDS", L["Time left"])
         local warnInitializer = CreateSettingsCheckboxSliderInitializer(
-            warn, "Warn when expiring", "Also warn shortly before the buff runs out.",
-            seconds, SliderOptions(rule, "seconds"), "Seconds left", "Warn when this many seconds are left.")
+            warn, L["Warn when expiring"], L["Also warn shortly before the buff runs out."],
+            seconds, SliderOptions(rule, "seconds"), L["Time left"], L["Warn when this much time is left."])
         warnInitializer:SetParentInitializer(enabledInitializer, function() return enabled:GetValue() end)
         layout:AddInitializer(warnInitializer)
     elseif rule.defaultThreshold then
@@ -100,6 +113,12 @@ local function AddRule(category, layout, rule)
     end
 end
 
+local function AddRules(category, layout, ruleIds)
+    for _, ruleId in ipairs(ruleIds) do
+        AddRule(category, layout, Prepped:GetRule(ruleId))
+    end
+end
+
 local function AddRulesForGroup(category, layout, group)
     for _, rule in ipairs(Prepped.AllRules) do
         if rule.group == group then
@@ -108,11 +127,15 @@ local function AddRulesForGroup(category, layout, group)
     end
 end
 
+local function Header(layout, text)
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text))
+end
+
 ------------------------------------------------------------------------
 -- Dialogs
 ------------------------------------------------------------------------
 StaticPopupDialogs["PREPPED_CONFIRM_ACCOUNT_WIDE"] = {
-    text = "Use account-wide settings? This character's own Prepped settings will be cleared.",
+    text = L["Use account-wide settings? This character's own Prepped settings will be cleared."],
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -130,7 +153,7 @@ StaticPopupDialogs["PREPPED_CONFIRM_ACCOUNT_WIDE"] = {
 }
 
 StaticPopupDialogs["PREPPED_RESET_ALL_SETTINGS"] = {
-    text = "Reset ALL Prepped settings? This clears account-wide settings, character profiles and appearance.",
+    text = L["Reset ALL Prepped settings? This clears account-wide settings, character profiles, snoozes and appearance."],
     button1 = RESET,
     button2 = CANCEL,
     OnAccept = function()
@@ -146,11 +169,10 @@ StaticPopupDialogs["PREPPED_RESET_ALL_SETTINGS"] = {
 -- Pages
 ------------------------------------------------------------------------
 local function BuildGeneralPage(category, layout)
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("General"))
-
+    Header(layout, L["General"])
     AddRule(category, layout, Prepped:GetRule("general_master"))
 
-    local accountWide = Proxy(category, "ACCOUNT_WIDE", Settings.VarType.Boolean, "Use Account-wide Settings", true,
+    local accountWide = Proxy(category, "ACCOUNT_WIDE", Settings.VarType.Boolean, L["Use Account-wide Settings"], true,
         function() return Prepped:IsAccountWide() end,
         function(value)
             if value then
@@ -162,30 +184,27 @@ local function BuildGeneralPage(category, layout)
             end
         end)
     Settings.CreateCheckbox(category, accountWide, Prepped:GetRule("general_account_wide").description)
+    added.general_account_wide = true
 
-    AddRule(category, layout, Prepped:GetRule("general_welcome"))
-    AddRule(category, layout, Prepped:GetRule("general_sound"))
+    AddRules(category, layout, { "general_welcome", "general_sound" })
 
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Supplies"))
-    AddRule(category, layout, Prepped:GetRule("general_water"))
-    AddRule(category, layout, Prepped:GetRule("general_water_minlevel"))
-    AddRule(category, layout, Prepped:GetRule("general_repair"))
-    AddRule(category, layout, Prepped:GetRule("general_bag_space"))
+    Header(layout, L["Supplies"])
+    AddRules(category, layout, { "general_water", "general_food_stock", "general_water_minlevel", "general_bandages",
+        "general_repair", "general_repair_item", "general_gear_breaking", "general_bag_space", "general_hearthstone" })
 
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Groups"))
-    AddRule(category, layout, Prepped:GetRule("general_group_check"))
-    AddRule(category, layout, Prepped:GetRule("general_ready_check"))
-    AddRule(category, layout, Prepped:GetRule("general_group_announce"))
+    Header(layout, L["Groups and Vendors"])
+    AddRules(category, layout, { "general_group_check", "general_ready_check", "general_vendor_check",
+        "general_group_announce", "general_group_announce_raids" })
 
-    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Leveling"))
-    AddRule(category, layout, Prepped:GetRule("general_food"))
-    AddRule(category, layout, Prepped:GetRule("general_camp"))
-    AddRule(category, layout, Prepped:GetRule("general_talents"))
-    AddRule(category, layout, Prepped:GetRule("general_legacy"))
+    Header(layout, L["Leveling"])
+    AddRules(category, layout, { "general_food", "general_camp", "general_talents", "general_legacy" })
 
-    layout:AddInitializer(CreateSettingsButtonInitializer("Reset All Settings", RESET,
+    -- Anything on the General page not placed above
+    AddRulesForGroup(category, layout, "General")
+
+    layout:AddInitializer(CreateSettingsButtonInitializer(L["Reset All Settings"], RESET,
         function() StaticPopup_Show("PREPPED_RESET_ALL_SETTINGS") end,
-        "Reset every Prepped setting, profile and appearance option to its default.", true))
+        L["Reset every Prepped setting, profile, snooze and appearance option to its default."], true))
 end
 
 local function ColorToHex(color)
@@ -198,44 +217,67 @@ local function ColorSetting(category, key, name, colorKey, defaultHex)
         function(value)
             local color = Prepped:GetAppearance()[colorKey]
             color.r, color.g, color.b = CreateColorFromHexString(value):GetRGB()
-            Prepped:ApplyAppearance()
+            Prepped:ApplyAppearance(true)
         end)
 end
 
-local function AppearanceSlider(category, key, name, appKey, default, min, max, step, format, tooltip)
+local function AppearanceSlider(category, key, name, appKey, default, minValue, maxValue, step, format, tooltip)
     local setting = Proxy(category, key, Settings.VarType.Number, name, default,
         function() return Prepped:GetAppearance()[appKey] or default end,
         function(value)
             Prepped:GetAppearance()[appKey] = Round(value)
-            Prepped:ApplyAppearance()
+            Prepped:ApplyAppearance(true)
         end)
-    local options = Settings.CreateSliderOptions(min, max, step)
+    local options = Settings.CreateSliderOptions(minValue, maxValue, step)
     options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
         return string.format(format, Round(value))
     end)
     Settings.CreateSlider(category, setting, options, tooltip)
 end
 
-local function BuildAppearancePage(category)
-    AppearanceSlider(category, "FONT_SIZE", "Font Size", "fontSize", 18, 10, 40, 1, "%d", "Size of the reminder text.")
-    AppearanceSlider(category, "MIN_WIDTH", "Minimum Width", "minWidth", 400, 100, 1200, 10, "%d",
-        "Reminder bars are at least this wide and grow to fit longer text.")
-    Settings.CreateColorSwatch(category, ColorSetting(category, "FONT_COLOR", "Text Color", "fontColor", "ffffd100"),
-        "Color of the reminder text.")
-    Settings.CreateColorSwatch(category, ColorSetting(category, "BG_COLOR", "Background Color", "bgColor", "ff000000"),
-        "Color of the reminder bars.")
+local function DisplayCheckbox(category, key, optionKey, name, default, tooltip)
+    local setting = Proxy(category, key, Settings.VarType.Boolean, name, default,
+        function() return Prepped:GetDisplayOption(optionKey) end,
+        function(value) Prepped:SetDisplayOption(optionKey, value) end)
+    Settings.CreateCheckbox(category, setting, tooltip)
+end
 
-    local opacity = Proxy(category, "BG_OPACITY", Settings.VarType.Number, "Background Opacity", 50,
+local function BuildAppearancePage(category, layout)
+    Header(layout, L["Position"])
+    layout:AddInitializer(CreateSettingsButtonInitializer(L["Move Reminders"], L["Move"],
+        function() Prepped:SetMoving(true) end,
+        L["Shows sample reminders you can drag anywhere. Right-click them or press Escape when you're done. Edit Mode moves them too."], true))
+    layout:AddInitializer(CreateSettingsButtonInitializer(L["Reset Position"], RESET,
+        function() ns.Display:ResetPosition() end, L["Put the reminders back in their default place."], true))
+    DisplayCheckbox(category, "GROW_UP", "growUp", L["Grow Upwards"], false,
+        L["New reminders are added above the first one instead of below it."])
+
+    Header(layout, L["Reminders"])
+    DisplayCheckbox(category, "SHOW_ICONS", "showIcons", L["Show Icons"], true,
+        L["Show the spell or item a reminder is about next to its text."])
+    DisplayCheckbox(category, "CLICKABLE", "clickable", L["Clickable Reminders"], true,
+        L["Out of combat, left-click a reminder to fix it (cast the buff, apply the poison, ...) and right-click it to snooze or turn it off. While a reminder shows, its text and icon catch your clicks instead of the world behind them."])
+
+    Header(layout, L["Look"])
+    AppearanceSlider(category, "FONT_SIZE", L["Font Size"], "fontSize", 18, 10, 40, 1, "%d", L["Size of the reminder text."])
+    AppearanceSlider(category, "MIN_WIDTH", L["Minimum Width"], "minWidth", 400, 100, 1200, 10, "%d",
+        L["Reminder bars are at least this wide and grow to fit longer text."])
+    Settings.CreateColorSwatch(category, ColorSetting(category, "FONT_COLOR", L["Text Color"], "fontColor", "ffffd100"),
+        L["Color of the reminder text."])
+    Settings.CreateColorSwatch(category, ColorSetting(category, "BG_COLOR", L["Background Color"], "bgColor", "ff000000"),
+        L["Color of the reminder bars."])
+
+    local opacity = Proxy(category, "BG_OPACITY", Settings.VarType.Number, L["Background Opacity"], 50,
         function() return Round((Prepped:GetAppearance().bgColor.a or 0.5) * 100) end,
         function(value)
             Prepped:GetAppearance().bgColor.a = Round(value) / 100
-            Prepped:ApplyAppearance()
+            Prepped:ApplyAppearance(true)
         end)
     local options = Settings.CreateSliderOptions(0, 100, 5)
     options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
         return string.format("%d%%", Round(value))
     end)
-    Settings.CreateSlider(category, opacity, options, "How see-through the reminder bars are.")
+    Settings.CreateSlider(category, opacity, options, L["How see-through the reminder bars are."])
 end
 
 -- Called once SavedVariables are loaded (ADDON_LOADED).
@@ -245,12 +287,16 @@ function Options.Create()
     local category, layout = Settings.RegisterVerticalLayoutCategory("Prepped")
     BuildGeneralPage(category, layout)
 
-    local appearance = Settings.RegisterVerticalLayoutSubcategory(category, "Appearance")
-    BuildAppearancePage(appearance)
+    local appearance, appearanceLayout = Settings.RegisterVerticalLayoutSubcategory(category, L["Appearance"])
+    BuildAppearancePage(appearance, appearanceLayout)
 
-    for _, group in ipairs(CLASS_PAGES) do
-        local page, pageLayout = Settings.RegisterVerticalLayoutSubcategory(category, group)
-        AddRulesForGroup(page, pageLayout, group)
+    Options.pages = { Appearance = appearance }
+    local classNames = LOCALIZED_CLASS_NAMES_MALE or {}
+    for _, page in ipairs(CLASS_PAGES) do
+        local group, classToken = page[1], page[2]
+        local subcategory, pageLayout = Settings.RegisterVerticalLayoutSubcategory(category, classNames[classToken] or group)
+        AddRulesForGroup(subcategory, pageLayout, group)
+        Options.pages[group] = subcategory
     end
 
     Settings.RegisterAddOnCategory(category)
@@ -258,10 +304,10 @@ function Options.Create()
     return category
 end
 
-function Options.Open()
-    if Options.category then
-        Settings.OpenToCategory(Options.category:GetID())
-        return true
-    end
-    return false
+-- Opens Prepped's options, on a rule group's page if given ("Mage", ...).
+function Options.Open(group)
+    if not Options.category then return false end
+    local page = (group and Options.pages and Options.pages[group]) or Options.category
+    Settings.OpenToCategory(page:GetID())
+    return true
 end
